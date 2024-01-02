@@ -20,7 +20,7 @@ while true; do
     echo "_  | |  |    | |\ | "
     echo "_| |_|  |___ | | \| "
     echo "                                "
-    echo -e "\033[96m s0lin一键脚本工具 v1.0.0 （支持Ubuntu/Debian/CentOS系统）\033[0m"
+    echo -e "\033[96m solin一键脚本工具 v1.0.0 （支持Ubuntu/Debian/CentOS系统）\033[0m"
     echo -e "\033[96m-输入\033[93mk\033[96m可快速启动此脚本-\033[0m"
     echo "------------------------"
     echo "1. 系统信息查询"
