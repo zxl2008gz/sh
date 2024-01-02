@@ -20,22 +20,14 @@ while true; do
     echo "  |_  | |  |    | |\ | "
     echo "   _| |_|  |___ | | \| "
     echo "                                "
-    echo -e "\033[96m科技lion一键脚本工具 v2.1.5 （支持Ubuntu/Debian/CentOS系统）\033[0m"
+    echo -e "\033[96m s0lin一键脚本工具 v1.0.0 （支持Ubuntu/Debian/CentOS系统）\033[0m"
     echo -e "\033[96m-输入\033[93mk\033[96m可快速启动此脚本-\033[0m"
     echo "------------------------"
     echo "1. 系统信息查询"
     echo "2. 系统更新"
     echo "3. 系统清理"
-    echo "4. 常用工具 ▶"
-    echo "5. BBR管理 ▶"
-    echo "6. Docker管理 ▶ "
-    echo "7. WARP管理 ▶ 解锁ChatGPT Netflix"
-    echo "8. 测试脚本合集 ▶ "
-    echo "9. 甲骨文云脚本合集 ▶ "
     echo -e "\033[33m10. LDNMP建站 ▶ \033[0m"
-    echo "11. 面板工具 ▶ "
-    echo "12. 我的工作区 ▶ "
-    echo "13. 系统工具 ▶ "
+    echo "4. 系统工具 ▶ "
     echo "------------------------"
     echo "00. 脚本更新"
     echo "------------------------"
@@ -52,6 +44,9 @@ while true; do
             # 系统更新逻辑
             ;;
         3)
+            # 系统清理逻辑
+            ;;
+        4)
             # 系统清理逻辑
             ;;
         # ... 其他选项的逻辑 ...
