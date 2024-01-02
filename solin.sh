@@ -17,8 +17,8 @@ while true; do
 
     # 显示菜单
     echo -e "\033[96m_   _ "
-    echo "          |_  | |  |    | |\ | "
-    echo "           _| |_|  |___ | | \| "
+    echo "      |_  | |  |    | |\ | "
+    echo "       _| |_|  |___ | | \| "
     echo "                                "
     echo -e "\033[96m科技lion一键脚本工具 v2.1.5 （支持Ubuntu/Debian/CentOS系统）\033[0m"
     echo -e "\033[96m-输入\033[93mk\033[96m可快速启动此脚本-\033[0m"
