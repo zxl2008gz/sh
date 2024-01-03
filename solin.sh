@@ -657,7 +657,6 @@ while true; do
 			            docker-latest-logrotate docker-logrotate docker-engine
 			        fi
 			        # 删除Docker的数据和配置文件
-			        rm -rf /var/lib/docker
 	   			sudo rm -rf /var/lib/docker
        				sudo rm -rf /var/lib/containerd
 			        ;;
