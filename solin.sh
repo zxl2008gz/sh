@@ -225,7 +225,7 @@ install_docker() {
 }
 
  # 查看Docker全局状态逻辑
-Check_docker(){
+check_docker() {
 	echo "Dcoker版本"
 	docker --version
 	docker-compose --version
@@ -318,7 +318,7 @@ while true; do
                     2)
                         # 查看Docker全局状态逻辑
 			clear
-   			Check_docker
+   			check_docker
                         ;;
                     3)
                         # Dcoker容器管理
