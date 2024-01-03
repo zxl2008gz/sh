@@ -854,11 +854,11 @@ while true; do
 	   		install_certbot
       			# 创建必要的目录和文件
       			cd /home && mkdir -p web/html web/mysql web/certs web/conf.d web/redis web/log/nginx && touch web/docker-compose.yml
-	 		wget -O https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/nginx.conf
-    			wget -O https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/default.conf
+	 		wget -O  /home/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/nginx.conf
+    			wget -O /home/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/default.conf
        			default_server_ssl
 
-   			wget -O https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/docker-compose.yml
+   			wget -O /home/web/docker-compose.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/docker-compose.yml
       			dbrootpasswd=$(openssl rand -base64 16) && dbuse=$(openssl rand -hex 4) && dbusepasswd=$(openssl rand -base64 8)
 	 		# 在 docker-compose.yml 文件中进行替换
 			sed -i "s/mysqlwebroot/$dbrootpasswd/g" /home/web/docker-compose.yml
