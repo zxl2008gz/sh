@@ -605,20 +605,20 @@ while true; do
                     8)
                         # 卸载Dcoker环境
 			clear
-   			read -p "确定卸载docker环境吗？(Y/N): " choice
-      			case "$choice" in
-	 			[Yy])
-     					docker rm $(docker ps -a -q) && docker rmi $(docker images -q) && docker network prune
-			                remove docker docker-ce > /dev/null 2>&1
-			                rm -rf /var/lib/docker
-			                ;;
-		   		[Nn])
-       					;;
-	    			*)
-					echo "无效的选择，请输入 Y 或 N。"
-     					;;
-	  		esac
-                        ;;						
+	                read -p "确定卸载docker环境吗？(Y/N): " choice
+	                case "$choice" in
+	                  [Yy])
+	                    docker rm $(docker ps -a -q) && docker rmi $(docker images -q) && docker network prune
+	                    remove docker docker-ce > /dev/null 2>&1
+	                    rm -rf /var/lib/docker
+	                    ;;
+	                  [Nn])
+	                    ;;
+	                  *)
+	                    echo "无效的选择，请输入 Y 或 N。"
+	                    ;;
+	                esac
+	                ;;		
                     0)
                         solin
                         ;;
