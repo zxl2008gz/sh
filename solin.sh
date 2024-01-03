@@ -424,14 +424,13 @@ while true; do
                         # 卸载LDNMP环境
                         ;;			
                     0)
-                        break  # 跳出循环，退出菜单
+                        solin
                         ;;
                     *)
                         echo "无效的选项，请重新输入！"
                         ;;
                 esac
 			break  # 跳出循环，退出菜单
-   			;;
             done
             ;;
         6)
