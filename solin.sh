@@ -147,6 +147,7 @@ show_system_info() {
     echo "------------------------"
     echo "系统运行时长: $runtime"
     echo
+    echo -e "\033[0;32m系统信息查询操作完成\033[0m"
 }
 
 # 函数：更新系统
@@ -165,7 +166,7 @@ update_service() {
         yum -y update
     fi
 
-    echo "更新完成。"
+    echo -e "\033[0;32m更新操作完成\033[0m"
 }
 
 # 清理Debian系统
@@ -206,7 +207,7 @@ clean_service(){
         clean_redhat
     fi
 
-    echo "清理完成。"
+   echo -e "\033[0;32m清理操作完成\033[0m"
 }
 
 # 在主循环之前定义一个变量
