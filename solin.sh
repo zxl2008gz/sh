@@ -603,27 +603,37 @@ while true; do
 			esac
                         ;;
                     8)
-                        # 卸载Dcoker环境
+                       # 卸载Docker环境
 			clear
-	                read -p "确定卸载docker环境吗？(Y/N): " choice
-	                case "$choice" in
+			read -p "确定卸载docker环境吗？(Y/N): " choice
+			case "$choice" in
 			    [Yy])
-				# 停止所有 Docker 容器
-				docker stop $(docker ps -a -q)
-				# 删除所有 Docker 容器和镜像
-				docker rm $(docker ps -a -q) && docker rmi $(docker images -q) && docker network prune
-				# 对于基于 Debian 的系统（如 Ubuntu）
-				apt-get remove -y docker docker-engine docker.io containerd runc
-				# 删除 Docker 的数据和配置文件
-				rm -rf /var/lib/docker
-				;;
-			  [Nn])
-				;;
-	                  *)
-				echo "无效的选择，请输入 Y 或 N。"
-				;;
-	                esac
-	                ;;		
+			        # 停止所有正在运行的容器
+			        docker stop $(docker ps -q) 2>/dev/null
+			        # 删除所有容器
+			        docker rm $(docker ps -a -q) 2>/dev/null
+			        # 删除所有镜像
+			        docker rmi $(docker images -q) 2>/dev/null
+			        # 清除所有未使用的网络
+			        docker network prune -f
+			        # 根据系统选择合适的卸载命令
+			        if [ -f "/etc/debian_version" ]; then
+			            apt-get remove --purge -y docker docker-engine docker.io containerd runc
+			            apt-get autoremove -y --purge
+			        elif [ -f "/etc/redhat-release" ]; then
+			            yum remove -y docker docker-client docker-client-latest docker-common docker-latest \
+			            docker-latest-logrotate docker-logrotate docker-engine
+			        fi
+			        # 删除Docker的数据和配置文件
+			        rm -rf /var/lib/docker
+			        ;;
+			    [Nn])
+			        ;;
+			    *)
+			        echo "无效的选择，请输入 Y 或 N。"
+			        ;;
+			esac
+   			;;
                     0)
                         solin
                         ;;
