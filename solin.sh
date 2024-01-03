@@ -318,7 +318,7 @@ while true; do
                     2)
                         # 查看Docker全局状态逻辑
 			clear
-   			check_docker
+   			Check_docker
                         ;;
                     3)
                         # Dcoker容器管理
