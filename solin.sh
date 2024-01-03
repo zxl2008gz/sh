@@ -267,6 +267,13 @@ check_port() {
     fi
 }
 
+# 安装依赖
+install_dependency() {
+      clear
+      install wget socat unzip tar
+}
+
+
 
 
 
@@ -644,14 +651,15 @@ while true; do
 			        docker network prune -f
 			        # 根据系统选择合适的卸载命令
 			        if [ -f "/etc/debian_version" ]; then
-			            apt-get remove --purge -y docker docker-engine docker.io containerd runc
-			            apt-get autoremove -y --purge
+			            sudo apt-get purge docker-ce docker-ce-cli containerd.io docker-compose-plugin
 			        elif [ -f "/etc/redhat-release" ]; then
 			            yum remove -y docker docker-client docker-client-latest docker-common docker-latest \
 			            docker-latest-logrotate docker-logrotate docker-engine
 			        fi
 			        # 删除Docker的数据和配置文件
 			        rm -rf /var/lib/docker
+	   			sudo rm -rf /var/lib/docker
+       				sudo rm -rf /var/lib/containerd
 			        ;;
 			    [Nn])
 			        ;;
@@ -672,7 +680,6 @@ while true; do
             ;;
         5)
             while true; do
-				menu_exit=false  # 确保每次进入子菜单时，menu_exit 为 false
                 clear
                 echo -e "\033[33m5. LDNMP建站 ▶ \033[0m"
                 echo "------------------------"
@@ -711,6 +718,7 @@ while true; do
 		    1)
                         # 安装LDNMP环境
 			check_port
+ 		        install_dependency
                         ;;
                     2)
                         # 安装WordPress
