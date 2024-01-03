@@ -215,9 +215,13 @@ clean_service(){
 
 # 定义安装 Docker 的函数
 install_docker() {
-	curl -fsSL https://get.docker.com | sh && ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin
-	systemctl start docker
-	systemctl enable docker
+    if ! command -v docker &>/dev/null; then
+        curl -fsSL https://get.docker.com | sh && ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin
+        systemctl start docker
+        systemctl enable docker
+    else
+        echo "Docker 已经安装"
+    fi
 }
 
  # 查看Docker全局状态逻辑
@@ -270,12 +274,22 @@ check_port() {
 # 安装依赖
 install_dependency() {
       clear
-      install wget socat unzip tar
+      install wget socat unzip tar iptables
 }
 
+install_certbot() {
+    install certbot
 
+    # 切换到一个一致的目录（例如，家目录）
+    cd ~ || exit
 
+    # 下载并使脚本可执行
+    curl -O https://raw.githubusercontent.com/kejilion/sh/main/auto_cert_renewal.sh
+    chmod +x auto_cert_renewal.sh
 
+    # 安排每日午夜运行脚本
+    echo "0 0 * * * cd ~ && ./auto_cert_renewal.sh" | crontab -
+}
 
 
 # 主循环，用于显示菜单并处理用户输入
