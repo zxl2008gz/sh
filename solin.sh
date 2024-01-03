@@ -22,6 +22,8 @@ break_end() {
       echo -e "\033[0;32m操作完成\033[0m"
       echo "按任意键继续..."
       read -n 1 -s -r -p ""
+      echo
+      clear
 }
 
 # 函数: 获取IPv4地址
@@ -251,17 +253,14 @@ while true; do
         1)
             clear
             show_system_info
-	    break_end		
             ;;
         2)
             clear
             update_service
-            break_end	
             ;;
         3)
             clear
             clean_service
-            break_end		
             ;;
         4)
             while true; do
@@ -290,7 +289,6 @@ while true; do
                         # Docker安装更新逻辑
 			clear
    			install_docker
-      			break_end
 	     		;;
                     2)
                         # 查看Docker全局状态逻辑
@@ -428,7 +426,7 @@ while true; do
                         echo "无效的选项，请重新输入！"
                         ;;
                 esac
-			break  # 跳出循环，退出菜单
+			break_end  # 跳出循环，退出菜单
             done
             ;;
         6)
