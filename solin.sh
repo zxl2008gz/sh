@@ -155,7 +155,6 @@ show_system_info() {
     echo "------------------------"
     echo "系统运行时长: $runtime"
     echo
-    # echo -e "\033[0;32m系统信息查询操作完成\033[0m"
 }
 
 # 函数：更新系统
@@ -173,8 +172,6 @@ update_service() {
         echo "检测到基于Red Hat的系统。"
         yum -y update
     fi
-
-    echo -e "\033[0;32m更新操作完成\033[0m"
 }
 
 # 清理Debian系统
@@ -214,8 +211,6 @@ clean_service(){
         echo "检测到基于Red Hat的系统。"
         clean_redhat
     fi
-
-   echo -e "\033[0;32m清理操作完成\033[0m"
 }
 
 # 定义安装 Docker 的函数
@@ -229,13 +224,9 @@ install_docker() {
     fi
 }
 
-# 在主循环之前定义一个变量
-menu_exit=false
-
 # 主循环，用于显示菜单并处理用户输入
 while true; do
     clear  # 清除屏幕
-
     # 显示菜单
     echo -e "\033[96m _   _ "
     echo "|_  | |  |    | |\ | "
@@ -267,18 +258,15 @@ while true; do
         2)
             clear
             update_service
-            echo "请按任意键继续..."
-            read -n 1 -s -r		
+            break_end	
             ;;
         3)
             clear
             clean_service
-            echo "请按任意键继续..."
-            read -n 1 -s -r		
+            break_end		
             ;;
         4)
             while true; do
-				menu_exit=false  # 确保每次进入子菜单时，menu_exit 为 false
                 clear
                 echo "▶ Docker管理器"
                 echo "------------------------"
@@ -304,8 +292,7 @@ while true; do
                         # Docker安装更新逻辑
 			clear
    			install_docker
-      			echo "请按任意键继续..."
-           		read -n 1 -s -r
+      			break_end
 	     		;;
                     2)
                         # 查看Docker全局状态逻辑
@@ -329,16 +316,13 @@ while true; do
                         # 卸载Dcoker环境
                         ;;						
                     0)
-                        menu_exit=true  # 设置变量为true，表示需要退出内部循环
+                        solin
                         ;;
                     *)
                         echo "无效的选项，请重新输入！"
                         ;;
                 esac
-					# 检查是否需要退出内部循环
-					if [ "$menu_exit" = true ]; then
-						break
-					fi
+			break_end
             done
             ;;
         5)
@@ -379,7 +363,7 @@ while true; do
                 read -p "请输入你的选择: " sub_choice
 
                 case $sub_choice in
-					1)
+		    1)
                         # 安装LDNMP环境
                         ;;
                     2)
@@ -440,16 +424,14 @@ while true; do
                         # 卸载LDNMP环境
                         ;;			
                     0)
-                        menu_exit=true  # 设置变量为true，表示需要退出内部循环
+                        break  # 跳出循环，退出菜单
                         ;;
                     *)
                         echo "无效的选项，请重新输入！"
                         ;;
                 esac
-					# 检查是否需要退出内部循环
-					if [ "$menu_exit" = true ]; then
-						break
-					fi
+			break  # 跳出循环，退出菜单
+   			;;
             done
             ;;
         6)
@@ -460,11 +442,12 @@ while true; do
             ;;
         0)
             # 退出脚本
-			clear
-            break
+	    clear
+            exit
             ;;
         *)
             echo "无效的选项，请重新输入！"
             ;;
     esac
+    	   break_end
 done
