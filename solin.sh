@@ -284,7 +284,7 @@ install_certbot() {
     cd ~ || exit
 
     # 下载并使脚本可执行
-    curl -O https://raw.githubusercontent.com/kejilion/sh/main/auto_cert_renewal.sh
+    curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/auto_cert_renewal.sh
     chmod +x auto_cert_renewal.sh
 
     # 安排每日午夜运行脚本
