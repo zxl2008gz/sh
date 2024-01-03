@@ -18,6 +18,14 @@ solin() {
             exit
 }
 
+break_end() {
+      echo -e "\033[0;32m操作完成\033[0m"
+      echo "按任意键继续..."
+      read -n 1 -s -r -p ""
+      echo ""
+      clear
+}
+
 # 函数: 获取IPv4地址
 ipv4_address() {
     ipv4=$(curl -s ipv4.ip.sb)
@@ -147,7 +155,7 @@ show_system_info() {
     echo "------------------------"
     echo "系统运行时长: $runtime"
     echo
-    echo -e "\033[0;32m系统信息查询操作完成\033[0m"
+    # echo -e "\033[0;32m系统信息查询操作完成\033[0m"
 }
 
 # 函数：更新系统
@@ -254,8 +262,7 @@ while true; do
         1)
             clear
             show_system_info
-            # 等待用户按键以返回菜单
-            read -p "按任意键返回菜单..."			
+	    break_end		
             ;;
         2)
             clear
