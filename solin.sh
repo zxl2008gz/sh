@@ -607,16 +607,21 @@ while true; do
 			clear
 	                read -p "确定卸载docker环境吗？(Y/N): " choice
 	                case "$choice" in
-	                  [Yy])
-	                    docker rm $(docker ps -a -q) && docker rmi $(docker images -q) && docker network prune
-	                    remove docker docker-ce > /dev/null 2>&1
-	                    rm -rf /var/lib/docker
-	                    ;;
-	                  [Nn])
-	                    ;;
+			    [Yy])
+				# 停止所有 Docker 容器
+				docker stop $(docker ps -a -q)
+				# 删除所有 Docker 容器和镜像
+				docker rm $(docker ps -a -q) && docker rmi $(docker images -q) && docker network prune
+				# 对于基于 Debian 的系统（如 Ubuntu）
+				apt-get remove -y docker docker-engine docker.io containerd runc
+				# 删除 Docker 的数据和配置文件
+				rm -rf /var/lib/docker
+				;;
+			  [Nn])
+				;;
 	                  *)
-	                    echo "无效的选择，请输入 Y 或 N。"
-	                    ;;
+				echo "无效的选择，请输入 Y 或 N。"
+				;;
 	                esac
 	                ;;		
                     0)
