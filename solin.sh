@@ -224,6 +224,31 @@ install_docker() {
     fi
 }
 
+ # 查看Docker全局状态逻辑
+Check_docker(){
+	echo "Dcoker版本"
+	docker --version
+	docker-compose --version
+	echo ""
+	echo "Dcoker镜像列表"
+	docker image ls
+	echo ""
+	echo "Dcoker容器列表"
+	docker ps -a
+	echo ""
+	echo "Dcoker卷列表"
+	docker volume ls
+	echo ""
+	echo "Dcoker网络列表"
+	docker network ls
+	echo ""
+}
+
+
+
+
+
+
 # 主循环，用于显示菜单并处理用户输入
 while true; do
     clear  # 清除屏幕
@@ -292,6 +317,8 @@ while true; do
 	     		;;
                     2)
                         # 查看Docker全局状态逻辑
+			clear
+   			check_docker
                         ;;
                     3)
                         # Dcoker容器管理
