@@ -271,10 +271,124 @@ check_port() {
     fi
 }
 
+install() {
+    if [ $# -eq 0 ]; then
+        echo "未提供软件包参数!"
+        return 1
+    fi
+
+    for package in "$@"; do
+        if ! command -v "$package" &>/dev/null; then
+            if command -v apt &>/dev/null; then
+                apt update -y && apt install -y "$package"
+            elif command -v yum &>/dev/null; then
+                yum -y update && yum -y install "$package"
+            else
+                echo "未知的包管理器!"
+                return 1
+            fi
+        fi
+    done
+
+    return 0
+}
+
+
 # 安装依赖
 install_dependency() {
       clear
-      install wget socat unzip tar iptables
+      install wget socat unzip tar 
+}
+
+install_ldnmp() {
+      cd /home/web && docker-compose up -d
+      clear
+      echo "正在配置LDNMP环境，请耐心稍等……"
+
+      # 定义要执行的命令
+      commands=(
+          "docker exec php apt update > /dev/null 2>&1"
+          "docker exec php apt install -y libmariadb-dev-compat libmariadb-dev libzip-dev libmagickwand-dev imagemagick > /dev/null 2>&1"
+          "docker exec php docker-php-ext-install mysqli pdo_mysql zip exif gd intl bcmath opcache > /dev/null 2>&1"
+          "docker exec php pecl install imagick > /dev/null 2>&1"
+          "docker exec php sh -c 'echo \"extension=imagick.so\" > /usr/local/etc/php/conf.d/imagick.ini' > /dev/null 2>&1"
+          "docker exec php pecl install redis > /dev/null 2>&1"
+          "docker exec php sh -c 'echo \"extension=redis.so\" > /usr/local/etc/php/conf.d/docker-php-ext-redis.ini' > /dev/null 2>&1"
+          "docker exec php sh -c 'echo \"upload_max_filesize=50M \\n post_max_size=50M\" > /usr/local/etc/php/conf.d/uploads.ini' > /dev/null 2>&1"
+          "docker exec php sh -c 'echo \"memory_limit=256M\" > /usr/local/etc/php/conf.d/memory.ini' > /dev/null 2>&1"
+          "docker exec php sh -c 'echo \"max_execution_time=1200\" > /usr/local/etc/php/conf.d/max_execution_time.ini' > /dev/null 2>&1"
+          "docker exec php sh -c 'echo \"max_input_time=600\" > /usr/local/etc/php/conf.d/max_input_time.ini' > /dev/null 2>&1"
+
+          "docker exec php74 apt update > /dev/null 2>&1"
+          "docker exec php74 apt install -y libmariadb-dev-compat libmariadb-dev libzip-dev libmagickwand-dev imagemagick > /dev/null 2>&1"
+          "docker exec php74 docker-php-ext-install mysqli pdo_mysql zip gd intl bcmath opcache > /dev/null 2>&1"
+          "docker exec php74 pecl install imagick > /dev/null 2>&1"
+          "docker exec php74 sh -c 'echo \"extension=imagick.so\" > /usr/local/etc/php/conf.d/imagick.ini' > /dev/null 2>&1"
+          "docker exec php74 pecl install redis > /dev/null 2>&1"
+          "docker exec php74 sh -c 'echo \"extension=redis.so\" > /usr/local/etc/php/conf.d/docker-php-ext-redis.ini' > /dev/null 2>&1"
+          "docker exec php74 sh -c 'echo \"upload_max_filesize=50M \\n post_max_size=50M\" > /usr/local/etc/php/conf.d/uploads.ini' > /dev/null 2>&1"
+          "docker exec php74 sh -c 'echo \"memory_limit=256M\" > /usr/local/etc/php/conf.d/memory.ini' > /dev/null 2>&1"
+          "docker exec php74 sh -c 'echo \"max_execution_time=1200\" > /usr/local/etc/php/conf.d/max_execution_time.ini' > /dev/null 2>&1"
+          "docker exec php74 sh -c 'echo \"max_input_time=600\" > /usr/local/etc/php/conf.d/max_input_time.ini' > /dev/null 2>&1"
+
+          "docker exec nginx chmod -R 777 /var/www/html"
+          "docker exec php chmod -R 777 /var/www/html"
+          "docker exec php74 chmod -R 777 /var/www/html"
+
+          "docker restart php > /dev/null 2>&1"
+          "docker restart php74 > /dev/null 2>&1"
+          "docker restart nginx > /dev/null 2>&1"
+
+      )
+
+      total_commands=${#commands[@]}  # 计算总命令数
+
+      for ((i = 0; i < total_commands; i++)); do
+          command="${commands[i]}"
+          eval $command  # 执行命令
+
+          # 打印百分比和进度条
+          percentage=$(( (i + 1) * 100 / total_commands ))
+          completed=$(( percentage / 2 ))
+          remaining=$(( 50 - completed ))
+          progressBar="["
+          for ((j = 0; j < completed; j++)); do
+              progressBar+="#"
+          done
+          for ((j = 0; j < remaining; j++)); do
+              progressBar+="."
+          done
+          progressBar+="]"
+          echo -ne "\r[$percentage%] $progressBar"
+      done
+
+      echo  # 打印换行，以便输出不被覆盖
+
+
+      clear
+      echo "LDNMP环境安装完毕"
+      echo "------------------------"
+
+      # 获取nginx版本
+      nginx_version=$(docker exec nginx nginx -v 2>&1)
+      nginx_version=$(echo "$nginx_version" | grep -oP "nginx/\K[0-9]+\.[0-9]+\.[0-9]+")
+      echo -n "nginx : v$nginx_version"
+
+      # 获取mysql版本
+      dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+      mysql_version=$(docker exec mysql mysql -u root -p"$dbrootpasswd" -e "SELECT VERSION();" 2>/dev/null | tail -n 1)
+      echo -n "            mysql : v$mysql_version"
+
+      # 获取php版本
+      php_version=$(docker exec php php -v 2>/dev/null | grep -oP "PHP \K[0-9]+\.[0-9]+\.[0-9]+")
+      echo -n "            php : v$php_version"
+
+      # 获取redis版本
+      redis_version=$(docker exec redis redis-server -v 2>&1 | grep -oP "v=+\K[0-9]+\.[0-9]+")
+      echo "            redis : v$redis_version"
+
+      echo "------------------------"
+      echo ""
 }
 
 install_certbot() {
@@ -291,6 +405,11 @@ install_certbot() {
     echo "0 0 * * * cd ~ && ./auto_cert_renewal.sh" | crontab -
 }
 
+default_server_ssl() {
+	install openssl
+	openssl req -x509 -nodes -newkey rsa:2048 -keyout /home/web/certs/default_server.key -out /home/web/certs/default_server.crt -days 5475 -subj "/C=US/ST=State/L=City/O=Organization/OU=Organizational Unit/CN=Common Name"
+
+}
 
 # 主循环，用于显示菜单并处理用户输入
 while true; do
@@ -732,6 +851,20 @@ while true; do
                         # 安装LDNMP环境
 			check_port
  		        install_dependency
+	   		install_certbot
+      			# 创建必要的目录和文件
+      			cd /home && mkdir -p web/html web/mysql web/certs web/conf.d web/redis web/log/nginx && touch web/docker-compose.yml
+	 		wget -O https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/nginx.conf
+    			wget -O https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/default.conf
+       			default_server_ssl
+
+   			wget -O https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/docker-compose.yml
+      			dbrootpasswd=$(openssl rand -base64 16) && dbuse=$(openssl rand -hex 4) && dbusepasswd=$(openssl rand -base64 8)
+	 		# 在 docker-compose.yml 文件中进行替换
+			sed -i "s/mysqlwebroot/$dbrootpasswd/g" /home/web/docker-compose.yml
+			sed -i "s/mysqlpasswd/$dbusepasswd/g" /home/web/docker-compose.yml
+			sed -i "s/mysqluse/$dbuse/g" /home/web/docker-compose.yml
+   			install_ldnmp
                         ;;
                     2)
                         # 安装WordPress
