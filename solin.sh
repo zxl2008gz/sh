@@ -215,13 +215,9 @@ clean_service(){
 
 # 定义安装 Docker 的函数
 install_docker() {
-    if ! command -v docker &>/dev/null; then
-        curl -fsSL https://get.docker.com | sh && ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin
-        systemctl start docker
-        systemctl enable docker
-    else
-        echo "Docker 已经安装"
-    fi
+	curl -fsSL https://get.docker.com | sh && ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin
+	systemctl start docker
+	systemctl enable docker
 }
 
  # 查看Docker全局状态逻辑
