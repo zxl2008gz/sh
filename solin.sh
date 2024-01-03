@@ -23,7 +23,6 @@ break_end() {
       echo "按任意键继续..."
       read -n 1 -s -r -p ""
       echo ""
-      clear
 }
 
 # 函数: 获取IPv4地址
