@@ -411,6 +411,77 @@ default_server_ssl() {
 
 }
 
+nginx_status() {
+
+    nginx_container_name="nginx"
+
+    # 获取容器的状态
+    container_status=$(docker inspect -f '{{.State.Status}}' "$nginx_container_name" 2>/dev/null)
+
+    # 获取容器的重启状态
+    container_restart_count=$(docker inspect -f '{{.RestartCount}}' "$nginx_container_name" 2>/dev/null)
+
+    # 检查容器是否在运行，并且没有处于"Restarting"状态
+    if [ "$container_status" == "running" ]; then
+        echo ""
+    else
+        rm -r /home/web/html/$yuming >/dev/null 2>&1
+        rm /home/web/conf.d/$yuming.conf >/dev/null 2>&1
+        rm /home/web/certs/${yuming}_key.pem >/dev/null 2>&1
+        rm /home/web/certs/${yuming}_cert.pem >/dev/null 2>&1
+        docker restart nginx >/dev/null 2>&1
+        echo -e "\e[1;31m检测到域名证书申请失败，请检测域名是否正确解析或更换域名重新尝试！\e[0m"
+    fi
+}
+
+
+# 添加域名
+add_yuming() {
+      ipv4_address
+      echo -e "先将域名解析到本机IP: \033[33m$ipv4_address\033[0m"
+      read -p "请输入你解析的域名: " yuming
+}
+
+iptables_open() {
+    iptables -P INPUT ACCEPT
+    iptables -P FORWARD ACCEPT
+    iptables -P OUTPUT ACCEPT
+    iptables -F
+}
+
+#获取SSL证书
+install_ssltls() {
+      docker stop nginx > /dev/null 2>&1
+      iptables_open
+      cd ~
+      certbot certonly --standalone -d $yuming --email your@email.com --agree-tos --no-eff-email --force-renewal
+      cp /etc/letsencrypt/live/$yuming/cert.pem /home/web/certs/${yuming}_cert.pem
+      cp /etc/letsencrypt/live/$yuming/privkey.pem /home/web/certs/${yuming}_key.pem
+      docker start nginx > /dev/null 2>&1
+}
+
+# 添加数据库
+add_db() {
+      dbname=$(echo "$yuming" | sed -e 's/[^A-Za-z0-9]/_/g')
+      dbname="${dbname}"
+
+      dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+      dbuse=$(grep -oP 'MYSQL_USER:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+      dbusepasswd=$(grep -oP 'MYSQL_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+      docker exec mysql mysql -u root -p"$dbrootpasswd" -e "CREATE DATABASE $dbname; GRANT ALL PRIVILEGES ON $dbname.* TO \"$dbuse\"@\"%\";"
+}
+
+#重启 LDNMP
+restart_ldnmp() {
+      docker exec nginx chmod -R 777 /var/www/html
+      docker exec php chmod -R 777 /var/www/html
+      docker exec php74 chmod -R 777 /var/www/html
+
+      docker restart php
+      docker restart php74
+      docker restart nginx
+}
+
 # 主循环，用于显示菜单并处理用户输入
 while true; do
     clear  # 清除屏幕
@@ -868,10 +939,70 @@ while true; do
    			install_ldnmp
                         ;;
                     2)
-                        # 安装WordPress
+                        clear
+			# 安装WordPress
+		        add_yuming
+		        install_ssltls
+		        add_db
+
+     			wget -O /home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/wordpress/wordpress.com.conf
+			sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
+
+   			cd /home/web/html
+      			mkdir $yuming
+	 		cd $yuming
+    			wget -O latest.zip https://cn.wordpress.org/latest-zh_CN.zip
+       			unzip latest.zip
+	  		rm latest.zip
+
+			echo "define('FS_METHOD', 'direct'); define('WP_REDIS_HOST', 'redis'); define('WP_REDIS_PORT', '6379');" >> /home/web/html/$yuming/wordpress/wp-config-sample.php
+
+      			restart_ldnmp
+
+    			 clear
+		        echo "您的WordPress搭建好了！"
+		        echo "https://$yuming"
+		        echo "------------------------"
+		        echo "WP安装信息如下: "
+		        echo "数据库名: $dbname"
+		        echo "用户名: $dbuse"
+		        echo "密码: $dbusepasswd"
+		        echo "数据库地址: mysql"
+		        echo "表前缀: wp_"
+		        nginx_status
                         ;;
                     3)
-                        # 安装可道云桌面
+                        clear
+			# 安装可道云桌面
+			add_yuming
+   			install_ssltls
+      			add_db
+
+   			wget -O /home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/kodbox/kodbox.com.conf
+      			sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
+
+    			cd /home/web/html
+       			mkdir $yuming
+	  		cd $yuming
+
+			wget https://github.com/kalcaddle/kodbox/archive/refs/tags/1.42.04.zip
+   			unzip -o 1.42.04.zip
+      			rm 1.42.04.zip
+
+  			restart_ldnmp
+
+			clear
+      			echo "您的可道云桌面搭建好了！"
+     			echo "https://$yuming"
+      			echo "------------------------"
+      			echo "安装信息如下: "
+      			echo "数据库地址: mysql"
+      			echo "用户名: $dbuse"
+      			echo "密码: $dbusepasswd"
+      			echo "数据库名: $dbname"
+      			echo "redis主机: redis"
+      			nginx_status
+     
                         ;;
                     4)
                         # 安装独角数发卡网
