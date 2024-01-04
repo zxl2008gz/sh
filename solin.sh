@@ -1005,7 +1005,48 @@ while true; do
      
                         ;;
                     4)
-                        # 安装独角数发卡网
+                        clear
+			# 安装独角数发卡网
+   			add_yuming
+      			install_ssltls
+      			add_db
+	 
+	 		wget -O /home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/dujiaoka/dujiaoka.com.conf
+    			sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
+
+	  		cd /home/web/html
+      			mkdir $yuming
+     	 		cd $yuming
+
+       			wget https://github.com/assimon/dujiaoka/releases/download/2.0.6/2.0.6-antibody.tar.gz && tar -zxvf 2.0.6-antibody.tar.gz && rm 2.0.6-antibody.tar.gz
+
+   			restart_ldnmp
+
+      			clear
+      			echo "您的独角数卡网站搭建好了！"
+      			echo "https://$yuming"
+      			echo "------------------------"
+      			echo "安装信息如下: "
+      			echo "数据库地址: mysql"
+      			echo "数据库端口: 3306"
+      			echo "数据库名: $dbname"
+      			echo "用户名: $dbuse"
+      			echo "密码: $dbusepasswd"
+      			echo ""
+      			echo "redis地址: redis"
+      			echo "redis密码: 默认不填写"
+      			echo "redis端口: 6379"
+      			echo ""
+      			echo "网站url: https://$yuming"
+      			echo "后台登录路径: /admin"
+      			echo "------------------------"
+      			echo "用户名: admin"
+      			echo "密码: admin"
+      			echo "------------------------"
+      			echo "登录时右上角如果出现红色error0请使用如下命令: "
+      			echo "我也很气愤独角数卡为啥这么麻烦，会有这样的问题！"
+      			echo "sed -i 's/ADMIN_HTTPS=false/ADMIN_HTTPS=true/g' /home/web/html/$yuming/dujiaoka/.env"
+      			nginx_status     			
                         ;;
                     5)
                         # 安装LobeChat聊天网站
