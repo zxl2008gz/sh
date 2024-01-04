@@ -1207,6 +1207,14 @@ while true; do
   	 		clear
       			echo "您的epusdt收款地址网站搭建好了！"
       			echo "https://$yuming"
+      			echo "------------------------"
+		        echo "epusdt安装信息如下: "
+		        echo "数据库名: $dbname"
+		        echo "用户名: $dbuse"
+		        echo "密码: $dbusepasswd"
+		        echo "数据库地址: mysql"
+		        echo "商户ID: $dbusepasswd"
+	  		echo "商户密钥: https://$yuming/api/v1/order/create-transaction"
       			nginx_status   		
                         ;;		
                     21)
