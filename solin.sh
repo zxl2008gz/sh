@@ -1155,7 +1155,7 @@ while true; do
 			-v /home/web/html/$yuming/vaultwarden:/data \
 			vaultwarden/server:latest
 
-    			duankou=3030
+    			duankou=8888
       			reverse_proxy   		
 
   	 		clear
