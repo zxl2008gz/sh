@@ -487,6 +487,17 @@ import_data() {
         docker exec -i mysql mysql -u "$dbuse" -p"$dbusepasswd" "$dbname" < "$datafile"
 }
 
+reverse_proxy() {
+      ipv4_address
+      wget -O /home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/reverse-proxy.conf
+      sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
+      sed -i "s/0.0.0.0/$ipv4_address/g" /home/web/conf.d/$yuming.conf
+      sed -i "s/0000/$duankou/g" /home/web/conf.d/$yuming.conf
+      docker restart nginx
+}
+
+
+
 #重启 LDNMP
 restart_ldnmp() {
       docker exec nginx chmod -R 777 /var/www/html
