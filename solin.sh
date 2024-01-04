@@ -1188,7 +1188,26 @@ while true; do
    			sed -i "s/你的tg机器人token/$tg_bot_token/g" /home/web/html/$yuming/epusdt/epusdt.conf
       			read -p "请输入你的tgid: " tg_id
 	 		sed -i "s/你的tgid/$tg_bot_token/g" /home/web/html/$yuming/epusdt/epusdt.conf      
-    			
+
+			docker run -d \
+			--name epusdt \
+			--restart=always \
+			--network my-network \
+			-p 8000:8000 \
+			-e mysql_host=mysql \
+			-e mysql_database=$dbname \
+			-e mysql_user=$dbuse \
+			-e mysql_passwd=$dbusepasswd \
+			-v /home/web/html/$yuming/epusdt/epusdt.conf:/app/.env \
+			stilleshan/epusdt
+
+       			duankou=8000
+      			reverse_proxy   		
+
+  	 		clear
+      			echo "您的epusdt收款地址网站搭建好了！"
+      			echo "https://$yuming"
+      			nginx_status   		
                         ;;		
                     21)
                         # 仅安装nginx
