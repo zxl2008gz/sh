@@ -894,7 +894,7 @@ while true; do
                 echo "4. 安装独角数发卡网"
                 echo "5. 安装LobeChat聊天网站"
                 echo "6. 安装GeminiPro聊天网站"
-                echo "7. 安装Bitwarden密码管理平台"
+                echo "7. 安装vaultwarden密码管理平台"
                 echo "8. 安装epusdt加密usdt接码"				
                 echo "------------------------"				
                 echo "21. 仅安装nginx"	
@@ -1049,13 +1049,81 @@ while true; do
       			nginx_status     			
                         ;;
                     5)
-                        # 安装LobeChat聊天网站
+                        clear
+			# 安装LobeChat聊天网站
+   			add_yuming
+      			install_ssltls
+	 		
+	 		docker run  -d --name lobe-chat \
+			--restart always \
+			-p 8089:3210 \
+			-e OPENAI_API_KEY=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 \
+			-e ACCESS_CODE=860210 \
+			-e HIDE_USER_API_KEY=1 \
+			-e BASE_URL=https://api.openai.com \
+			lobehub/lobe-chat
+
+   			duankou=8089
+      			reverse_proxy
+
+	 		clear
+      			echo "您的LobeChat聊天网站搭建好了！"
+      			echo "https://$yuming"
+      			nginx_status
                         ;;
                     6)
-                        # 安装GeminiPro聊天网站
+                        clear
+			# 安装GeminiPro聊天网站
+			add_yuming
+      			install_ssltls
+
+  			docker run --name geminiprochat \
+			--restart always \
+			-p 3030:3000 \
+			-itd \
+			-e GEMINI_API_KEY=AIzaSyDL3wR-ncjvgZeJEvX2Yg2WLLbSGEN4bo4 \
+			howie6879/geminiprochat:v0.1.0
+
+   			duankou=3030
+      			reverse_proxy
+	 
+	 		clear
+      			echo "您的GeminiPro聊天网站搭建好了！"
+      			echo "https://$yuming"
+      			nginx_status	 		
                         ;;	
                     7)
-                        # 安装Bitwarden密码管理平台
+		    	clear
+                        # 安装vaultwarden密码管理平台
+			add_yuming
+      			install_ssltls
+
+    			mkdir - /home/web/html/vaultwarden
+
+	  		docker run -d --name vaultwarden \
+			--restart=always \
+			-p 8888:8080 \
+			-e ROCKET_PORT=8080 \
+			-e WEBSOCKET_ENABLED=true \
+			-e SIGNUPS_ALLOWED=true \
+			-e LOGIN_RATELIMIT_MAX_BURST=10 \
+			-e LOGIN_RATELIMIT_SECONDS=60 \
+			-e ADMIN_RATELIMIT_MAX_BURST=10 \
+			-e ADMIN_RATELIMIT_SECONDS=60 \
+			-e ADMIN_SESSION_LIFETIME=20 \
+			-e SENDS_ALLOWED=true \
+			-e EMERGENCY_ACCESS_ALLOWED=true \
+			-e WEB_VAULT_ENABLED=true \
+			-v /html/vaultwarden:/data \
+			vaultwarden/server:latest
+
+    			duankou=3030
+      			reverse_proxy   		
+
+  	 		clear
+      			echo "您的vaultwarden聊天网站搭建好了！"
+      			echo "https://$yuming"
+      			nginx_status   			
                         ;;
                     8)
                         # 安装epusdt加密usdt接码
