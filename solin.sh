@@ -28,12 +28,12 @@ break_end() {
 
 # 函数: 获取IPv4地址
 ipv4_address() {
-    ipv4=$(curl -s ipv4.ip.sb)
+    ipv4_address=$(curl -s ipv4.ip.sb)
 }
 
 # 函数: 获取IPv6地址
 ipv6_address() {
-    ipv6=$(curl -s --max-time 2 ipv6.ip.sb)
+    ipv6_address=$(curl -s --max-time 2 ipv6.ip.sb)
 }
 
 # 函数: 显示系统信息
@@ -148,8 +148,8 @@ show_system_info() {
     echo "------------------------"
     echo "网络拥堵算法: $congestion_algorithm $queue_algorithm"
     echo "------------------------"
-    echo "公网IPv4地址: $ipv4"
-    echo "公网IPv6地址: $ipv6"
+    echo "公网IPv4地址: $ipv4_address"
+    echo "公网IPv6地址: $ipv6_address"
     echo "------------------------"
     echo "系统时间: $current_time"
     echo "------------------------"
