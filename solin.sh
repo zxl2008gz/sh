@@ -471,6 +471,22 @@ add_db() {
       docker exec mysql mysql -u root -p"$dbrootpasswd" -e "CREATE DATABASE $dbname; GRANT ALL PRIVILEGES ON $dbname.* TO \"$dbuse\"@\"%\";"
 }
 
+# 初始化数据库
+import_data() {
+	dbname=$(echo "$yuming" | sed -e 's/[^A-Za-z0-9]/_/g')
+	dbname="${dbname}"
+	
+	dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+	dbuse=$(grep -oP 'MYSQL_USER:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+	dbusepasswd=$(grep -oP 'MYSQL_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+
+	# 设定数据文件的路径，你需要根据实际情况修改此路径
+        datafile="/home/web/html/${yuming}/epusdt/upusdt.sql"
+	
+	# 导入数据
+        docker exec -i mysql mysql -u "$dbuse" -p"$dbusepasswd" "$dbname" < "$datafile"
+}
+
 #重启 LDNMP
 restart_ldnmp() {
       docker exec nginx chmod -R 777 /var/www/html
@@ -895,7 +911,7 @@ while true; do
                 echo "5. 安装LobeChat聊天网站"
                 echo "6. 安装GeminiPro聊天网站"
                 echo "7. 安装vaultwarden密码管理平台"
-                echo "8. 安装epusdt加密usdt接码"				
+                echo "8. 安装epusdt收款地址"				
                 echo "------------------------"				
                 echo "21. 仅安装nginx"	
                 echo "22. 站点重定向"
@@ -1053,7 +1069,11 @@ while true; do
 			# 安装LobeChat聊天网站
    			add_yuming
       			install_ssltls
-	 		
+
+   			cd /home/web/html
+      			mkdir $yuming
+     	 		cd $yuming
+	 
 	 		docker run  -d --name lobe-chat \
 			--restart always \
 			-p 8089:3210 \
@@ -1077,6 +1097,10 @@ while true; do
 			add_yuming
       			install_ssltls
 
+			cd /home/web/html
+      			mkdir $yuming
+     	 		cd $yuming
+
   			docker run --name geminiprochat \
 			--restart always \
 			-p 3030:3000 \
@@ -1097,8 +1121,11 @@ while true; do
                         # 安装vaultwarden密码管理平台
 			add_yuming
       			install_ssltls
-
-    			mkdir - /home/web/html/vaultwarden
+	 
+   			cd /home/web/html
+      			mkdir $yuming
+     	 		cd $yuming
+    			mkdir - /home/web/html/$yuming/vaultwarden
 
 	  		docker run -d --name vaultwarden \
 			--restart=always \
@@ -1114,7 +1141,7 @@ while true; do
 			-e SENDS_ALLOWED=true \
 			-e EMERGENCY_ACCESS_ALLOWED=true \
 			-e WEB_VAULT_ENABLED=true \
-			-v /html/vaultwarden:/data \
+			-v /home/web/html/$yuming/vaultwarden:/data \
 			vaultwarden/server:latest
 
     			duankou=3030
@@ -1126,7 +1153,42 @@ while true; do
       			nginx_status   			
                         ;;
                     8)
-                        # 安装epusdt加密usdt接码
+                        clear
+			# 安装epusdt收款地址
+			add_yuming
+      			install_ssltls
+
+   			cd /home/web/html
+      			mkdir $yuming
+     	 		cd $yuming
+    			mkdir - /home/web/html/$yuming/epusdt			
+      			chmod 777 -R /home/web/html/$yuming/epusdt
+	 
+    			dbname=$(echo "$yuming" | sed -e 's/[^A-Za-z0-9]/_/g')
+      			dbname="${dbname}"
+	 
+      			dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+      			dbuse=$(grep -oP 'MYSQL_USER:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+      			dbusepasswd=$(grep -oP 'MYSQL_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+	 		docker exec mysql mysql -u root -p"$dbrootpasswd" -e "CREATE DATABASE $dbname; GRANT ALL PRIVILEGES ON $dbname.* TO \"$dbuse\"@\"%\";"
+
+      			wget -O /home/web/html/$yuming/epusdt/epusdt.sql https://raw.githubusercontent.com/zxl2008gz/docker/main/epusdt/epusdt.sql
+			# 设定数据文件的路径，你需要根据实际情况修改此路径
+        		datafile="/home/web/html/${yuming}/epusdt/upusdt.sql"
+	
+			# 导入数据
+        		docker exec -i mysql mysql -u "$dbuse" -p"$dbusepasswd" "$dbname" < "$datafile"	 		
+ 		
+    			wget -O /home/web/html/$yuming/epusdt/epusdt.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/epusdt/epusdt.conf
+       			sed -i "s/yuming.com/$yuming/g" /home/web/html/$yuming/epusdt/epusdt.conf
+	  		sed -i "s/mysql_database=epusdt/mysql_database=$dbname/g" /home/web/html/$yuming/epusdt/epusdt.conf	
+			sed -i "s/mysql_user=epusdt/mysql_user=$dbuse/g" /home/web/html/$yuming/epusdt/epusdt.conf	
+   			sed -i "s/changeyourpassword/$dbusepasswd/g" /home/web/html/$yuming/epusdt/epusdt.conf	
+			read -p "请输入你的tg机器人token: " tg_bot_token
+   			sed -i "s/你的tg机器人token/$tg_bot_token/g" /home/web/html/$yuming/epusdt/epusdt.conf
+      			read -p "请输入你的tgid: " tg_id
+	 		sed -i "s/你的tgid/$tg_bot_token/g" /home/web/html/$yuming/epusdt/epusdt.conf      
+    			
                         ;;		
                     21)
                         # 仅安装nginx
