@@ -1472,7 +1472,7 @@ while true; do
 			read -p "输入远程服务器IP: " useip
 			read -p "输入远程服务器密码: " usepasswd
 			
-			wget -O ${useip}_beifen.sh https://raw.githubusercontent.com/kejilion/sh/main/beifen.sh > /dev/null 2>&1
+			wget -O ${useip}_beifen.sh https://raw.githubusercontent.com/zxl2008gz/sh/main/benfen.sh > /dev/null 2>&1
 			chmod +x ${useip}_beifen.sh
 			
 			sed -i "s/0.0.0.0/$useip/g" ${useip}_beifen.sh
@@ -1500,9 +1500,148 @@ while true; do
                         ;;		
                     34)
                         # 还原全站数据
+			clear
+      			cd /home/ && ls -t /home/*.tar.gz | head -1 | xargs -I {} tar -xzf {}
+      			check_port
+      			install_dependency
+      			install_docker
+      			install_certbot
+      			install_ldnmp
                         ;;		
                     35)
                         # 站点防御程序
+			if [ -x "$(command -v fail2ban-client)" ] && [ -d "/etc/fail2ban" ]; then
+			  while true; do
+			      clear
+			      echo "服务器防御程序已启动"
+			      echo "------------------------"
+			      echo "1. 开启SSH防暴力破解              2. 关闭SSH防暴力破解"
+			      echo "3. 开启网站保护                   4. 关闭网站保护"
+			      echo "------------------------"
+			      echo "5. 查看SSH拦截记录                6. 查看网站拦截记录"
+			      echo "7. 查看防御规则列表               8. 查看日志实时监控"
+			      echo "------------------------"
+			      echo "9. 卸载防御程序"
+			      echo "------------------------"
+			      echo "0. 退出"
+			      echo "------------------------"
+			      read -p "请输入你的选择: " sub_choice
+			      case $sub_choice in
+				  1)
+				      sed -i 's/false/true/g' /etc/fail2ban/jail.d/sshd.local
+				      systemctl restart fail2ban
+				      sleep 1
+				      fail2ban-client status
+				      ;;
+				  2)
+				      sed -i 's/true/false/g' /etc/fail2ban/jail.d/sshd.local
+				      systemctl restart fail2ban
+				      sleep 1
+				      fail2ban-client status
+				      ;;
+				  3)
+				      sed -i 's/false/true/g' /etc/fail2ban/jail.d/nginx.local
+				      systemctl restart fail2ban
+				      sleep 1
+				      fail2ban-client status
+				      ;;
+				  4)
+				      sed -i 's/true/false/g' /etc/fail2ban/jail.d/nginx.local
+				      systemctl restart fail2ban
+				      sleep 1
+				      fail2ban-client status
+				      ;;
+				  5)
+				      echo "------------------------"
+				      fail2ban-client status sshd
+				      echo "------------------------"
+				      ;;
+				  6)
+				      echo "------------------------"
+				      fail2ban-client status nginx-bad-request
+				      echo "------------------------"
+				      fail2ban-client status nginx-botsearch
+				      echo "------------------------"
+				      fail2ban-client status nginx-http-auth
+				      echo "------------------------"
+				      fail2ban-client status nginx-limit-req
+				      echo "------------------------"
+				      fail2ban-client status php-url-fopen
+				      echo "------------------------"
+				      ;;
+			
+				  7)
+				      fail2ban-client status
+				      ;;
+				  8)
+				      tail -f /var/log/fail2ban.log
+			
+				      ;;
+				  9)
+				      remove fail2ban
+				      break
+				      ;;
+				  0)
+				      break
+				      ;;
+				  *)
+				      echo "无效的选择，请重新输入。"
+				      ;;
+			      esac
+			      break_end
+			
+			  done
+			else
+			  clear
+			  # 安装Fail2ban
+			  if [ -f /etc/debian_version ]; then
+			      # Debian/Ubuntu系统
+			      install fail2ban
+			  elif [ -f /etc/redhat-release ]; then
+			      # CentOS系统
+			      install epel-release fail2ban
+			  else
+			      echo "不支持的操作系统类型"
+			      exit 1
+			  fi
+			
+			  # 启动Fail2ban
+			  systemctl start fail2ban
+			
+			  # 设置Fail2ban开机自启
+			  systemctl enable fail2ban
+			
+			  # 配置Fail2ban
+			  rm -rf /etc/fail2ban/jail.d/*
+			  cd /etc/fail2ban/jail.d/
+			  curl -sS -O https://raw.githubusercontent.com/zxl2008gz/sh/main/sshd.local
+			  systemctl restart fail2ban
+			  docker rm -f nginx
+			
+			  wget -O /home/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/nginx.conf
+			  wget -O /home/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/default.conf
+			  default_server_ssl
+			  docker run -d --name nginx --restart always --network web_default -p 80:80 -p 443:443 -v /home/web/nginx.conf:/etc/nginx/nginx.conf -v /home/web/conf.d:/etc/nginx/conf.d -v /home/web/certs:/etc/nginx/certs -v /home/web/html:/var/www/html -v /home/web/log/nginx:/var/log/nginx nginx
+			  docker exec -it nginx chmod -R 777 /var/www/html
+			
+			  # 获取宿主机当前时区
+			  HOST_TIMEZONE=$(timedatectl show --property=Timezone --value)
+			
+			  # 调整多个容器的时区
+			  docker exec -it nginx ln -sf "/usr/share/zoneinfo/$HOST_TIMEZONE" /etc/localtime
+			  docker exec -it php ln -sf "/usr/share/zoneinfo/$HOST_TIMEZONE" /etc/localtime
+			  docker exec -it php74 ln -sf "/usr/share/zoneinfo/$HOST_TIMEZONE" /etc/localtime
+			  docker exec -it mysql ln -sf "/usr/share/zoneinfo/$HOST_TIMEZONE" /etc/localtime
+			  docker exec -it redis ln -sf "/usr/share/zoneinfo/$HOST_TIMEZONE" /etc/localtime
+			  rm -rf /home/web/log/nginx/*
+			  docker restart nginx
+			
+			  curl -sS -O https://raw.githubusercontent.com/zxl2008gz/sh/main/nginx.local
+			  systemctl restart fail2ban
+			  sleep 1
+			  fail2ban-client status
+			  echo "防御程序已开启"
+			fi			
                         ;;		
                     36)
                         # 优化LDNMP环境
