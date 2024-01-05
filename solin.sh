@@ -2445,7 +2445,7 @@ while true; do
 		    net.core.default_qdisc=fq_pie
 		    net.ipv4.tcp_congestion_control=bbr
 		    EOF
-	            sysctl -p
+		    sysctl -p
 	            echo "XanMod内核安装并BBR3启用成功。重启后生效"
 	            rm -f /etc/apt/sources.list.d/xanmod-release.list
 	            rm -f check_x86-64_psabi.sh*
