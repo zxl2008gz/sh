@@ -2004,14 +2004,18 @@ while true; do
 	          case "$choice" in
 	            [Yy])
 	              while true; do
-	                read -p "请选择要重装的系统:  1. Debian12 | 2. Ubuntu20.04 : " sys_choice
+	                read -p "请选择要重装的系统:  1. Debian11 | 2. Debian12 | 2. Ubuntu20.04 : " sys_choice
 	
 	                case "$sys_choice" in
 	                  1)
-	                    xitong="-d 12"
+	                    xitong="-d 11"
 	                    break  # 结束循环
 	                    ;;
-	                  2)
+			  2)
+	                    xitong="-d 12"
+	                    break  # 结束循环
+	                    ;;       			
+	                  3)
 	                    xitong="-u 20.04"
 	                    break  # 结束循环
 	                    ;;
