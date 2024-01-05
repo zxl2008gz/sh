@@ -926,7 +926,7 @@ while true; do
                 echo "------------------------"				
                 echo "21. 仅安装nginx"	
                 echo "22. 站点重定向"
-				echo "23. 站点反向代理"
+		echo "23. 站点反向代理"
                 echo -e "24. 自定义静态站点 \033[36mBeta\033[0m"				
                 echo "------------------------"	
                 echo "31. 站点数据管理"	
@@ -1231,16 +1231,99 @@ while true; do
       			nginx_status   		
                         ;;		
                     21)
+		    	clear
                         # 仅安装nginx
-                        ;;		
+			check_port
+      			install_dependency
+      			install_docker
+      			install_certbot
+	 		cd /home && mkdir -p web/html web/mysql web/certs web/conf.d web/redis web/log/nginx && touch web/docker-compose.yml
+    			
+    			wget -O  /home/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/nginx.conf
+    			wget -O /home/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/default.conf
+       			default_server_ssl
+	  
+    			docker rm -f nginx >/dev/null 2>&1
+      			docker rmi nginx >/dev/null 2>&1
+	 		docker run -d --name nginx --restart always -p 80:80 -p 443:443 -v /home/web/nginx.conf:/etc/nginx/nginx.conf -v /home/web/conf.d:/etc/nginx/conf.d -v /home/web/certs:/etc/nginx/certs -v /home/web/html:/var/www/html -v /home/web/log/nginx:/var/log/nginx nginx
+
+			clear
+      			nginx_version=$(docker exec nginx nginx -v 2>&1)
+      			nginx_version=$(echo "$nginx_version" | grep -oP "nginx/\K[0-9]+\.[0-9]+\.[0-9]+")
+      			echo "nginx已安装完成"
+      			echo "当前版本: v$nginx_version"
+      			echo ""
+			;;		
                     22)
-                        # 站点重定向
+                        clear
+			# 站点重定向
+   			ipv4_address
+			echo -e "先将域名解析到本机IP: \033[33m$ipv4_address\033[0m"
+      			read -p "请输入你的域名: " yuming
+      			read -p "请输入跳转域名: " reverseproxy
+
+  			install_ssltls
+
+   			wget -O /home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/redirect
+      			sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
+      			sed -i "s/baidu.com/$reverseproxy/g" /home/web/conf.d/$yuming.conf
+
+  			docker restart nginx
+
+     			clear
+      			echo "您的重定向网站做好了！"
+      			echo "https://$yuming"
+     	 		nginx_status      
                         ;;		
                     23)
-                        # 站点反向代理
+                        clear
+			# 站点反向代理
+   			ipv4_address
+			echo -e "先将域名解析到本机IP: \033[33m$ipv4_address\033[0m"
+      			read -p "请输入你的域名: " yuming
+     	 		read -p "请输入你的反代IP: " reverseproxy
+      			read -p "请输入你的反代端口: " port
+	 		
+      			install_ssltls
+
+   			wget -O /home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/reverse-proxy.conf
+      			sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
+      			sed -i "s/0.0.0.0/$reverseproxy/g" /home/web/conf.d/$yuming.conf
+      			sed -i "s/0000/$port/g" /home/web/conf.d/$yuming.conf
+
+     			docker restart nginx
+
+      			clear
+      			echo "您的反向代理网站做好了！"
+      			echo "https://$yuming"
+      			nginx_status
                         ;;		
                     24)
-                        # 自定义静态站点
+                        clear
+			# 自定义静态站点
+   			add_yuming
+      			install_ssltls
+
+   			wget -O /home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/html.conf
+      			sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
+
+  			cd /home/web/html
+      			mkdir $yuming
+      			cd $yuming
+
+  			install lrzsz
+    			clear
+      			echo -e "目前只允许上传\033[33mindex.html\033[0m文件，请提前准备好，按任意键继续..."
+      			read -n 1 -s -r -p ""
+     			 rz
+
+			docker exec nginx chmod -R 777 /var/www/html
+      			docker restart nginx
+
+      			clear
+      			echo "您的静态网站搭建好了！"
+			echo "https://$yuming"
+      			nginx_status
                         ;;		
                     31)
                         # 站点数据管理
