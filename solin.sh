@@ -1189,8 +1189,8 @@ while true; do
         		datafile="/home/web/html/${yuming}/epusdt/epusdt.sql"
 	
 			# 导入数据
-        		docker exec -i mysql mysql -u "$dbuse" -p"$dbusepasswd" "$dbname" < "$datafile"	
-	  		# docker exec -i mysql sh -c 'exec mysql -u"$dbuse" -p"$dbusepasswd" "$dbname"' < "$datafile"
+        		# docker exec -i mysql mysql -u "$dbuse" -p"$dbusepasswd" "$dbname" < "$datafile"	
+	  		docker exec -i mysql sh -c 'exec mysql -u"$dbuse" -p"$dbusepasswd" "$dbname"' < "$datafile"
  		
     			wget -O /home/web/html/$yuming/epusdt/epusdt.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/epusdt/epusdt.conf
        			sed -i "s/yuming.com/$yuming/g" /home/web/html/$yuming/epusdt/epusdt.conf
