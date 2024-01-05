@@ -1645,6 +1645,73 @@ while true; do
                         ;;		
                     36)
                         # 优化LDNMP环境
+			while true; do
+				clear
+				echo "优化LDNMP环境"
+				echo "------------------------"
+				echo "1. 标准模式              2. 高性能模式 (推荐2H2G以上)"
+				echo "------------------------"
+				echo "0. 退出"
+				echo "------------------------"
+				read -p "请输入你的选择: " sub_choice
+				case $sub_choice in
+				  1)
+				  # nginx调优
+				  sed -i 's/worker_connections.*/worker_connections 1024;/' /home/web/nginx.conf
+				
+				  # php调优
+				  wget -O /home/www.conf https://raw.githubusercontent.com/zxl2008gz/sh/main/www-1.conf
+				  docker cp /home/www.conf php:/usr/local/etc/php-fpm.d/www.conf
+				  docker cp /home/www.conf php74:/usr/local/etc/php-fpm.d/www.conf
+				  rm -rf /home/www.conf
+				
+				  # mysql调优
+				  wget -O /home/custom_mysql_config.cnf https://raw.githubusercontent.com/zxl2008gz/sh/main/custom_mysql_config-1.cnf
+				  docker cp /home/custom_mysql_config.cnf mysql:/etc/mysql/conf.d/
+				  rm -rf /home/custom_mysql_config.cnf
+				
+				  docker restart nginx
+				  docker restart php
+				  docker restart php74
+				  docker restart mysql
+				
+				  echo "LDNMP环境已设置成 标准模式"
+				
+				      ;;
+				  2)
+				
+				  # nginx调优
+				  sed -i 's/worker_connections.*/worker_connections 131072;/' /home/web/nginx.conf
+				
+				  # php调优
+				  wget -O /home/www.conf https://raw.githubusercontent.com/zxl2008gz/sh/main/www.conf
+				  docker cp /home/www.conf php:/usr/local/etc/php-fpm.d/www.conf
+				  docker cp /home/www.conf php74:/usr/local/etc/php-fpm.d/www.conf
+				  rm -rf /home/www.conf
+				
+				  # mysql调优
+				  wget -O /home/custom_mysql_config.cnf https://raw.githubusercontent.com/zxl2008gz/sh/main/custom_mysql_config.cnf
+				  docker cp /home/custom_mysql_config.cnf mysql:/etc/mysql/conf.d/
+				  rm -rf /home/custom_mysql_config.cnf
+				
+				  docker restart nginx
+				  docker restart php
+				  docker restart php74
+				  docker restart mysql
+				
+				  echo "LDNMP环境已设置成 高性能模式"
+				
+				      ;;
+				  0)
+				      break
+				      ;;
+				  *)
+				      echo "无效的选择，请重新输入。"
+				      ;;
+				esac
+				break_end
+				
+				done
                         ;;		
                     37)
                         # 更新LDNMP环境
