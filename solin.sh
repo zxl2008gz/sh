@@ -2441,11 +2441,11 @@ while true; do
 	            apt install -y linux-xanmod-x64v$version
 	
 	            # 步骤5：启用BBR3
-	            cat > /etc/sysctl.conf << EOF
-		    net.core.default_qdisc=fq_pie
-		    net.ipv4.tcp_congestion_control=bbr
-		    EOF
-		    sysctl -p
+            cat > /etc/sysctl.conf << EOF
+net.core.default_qdisc=fq_pie
+net.ipv4.tcp_congestion_control=bbr
+EOF
+            sysctl -p
 	            echo "XanMod内核安装并BBR3启用成功。重启后生效"
 	            rm -f /etc/apt/sources.list.d/xanmod-release.list
 	            rm -f check_x86-64_psabi.sh*
