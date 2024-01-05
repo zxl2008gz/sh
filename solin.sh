@@ -2004,7 +2004,7 @@ while true; do
 	          case "$choice" in
 	            [Yy])
 	              while true; do
-	                read -p "请选择要重装的系统:  1. Debian11 | 2. Debian12 | 2. Ubuntu20.04 : " sys_choice
+	                read -p "请选择要重装的系统:  1. Debian11 | 2. Debian12 | 3. Ubuntu20.04 : " sys_choice
 	
 	                case "$sys_choice" in
 	                  1)
