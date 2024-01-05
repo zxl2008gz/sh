@@ -1198,7 +1198,7 @@ while true; do
 			read -p "请输入你的tg机器人token: " tg_bot_token
    			sed -i "s/你的tg机器人token/$tg_bot_token/g" /home/web/html/$yuming/epusdt/epusdt.conf
       			read -p "请输入你的tgid: " tg_id
-	 		sed -i "s/你的tgid/$tg_bot_token/g" /home/web/html/$yuming/epusdt/epusdt.conf      
+	 		sed -i "s/你的tgid/$tg_id/g" /home/web/html/$yuming/epusdt/epusdt.conf      
 
 			docker run -d \
 			--name epusdt \
