@@ -1715,9 +1715,33 @@ while true; do
                         ;;		
                     37)
                         # 更新LDNMP环境
+			clear
+			docker rm -f nginx php php74 mysql redis
+			docker rmi nginx php:fpm php:7.4.33-fpm mysql redis
+			
+			check_port
+			install_dependency
+			install_docker
+			install_certbot
+			install_ldnmp			
                         ;;		
                     38)
                         # 卸载LDNMP环境
+			clear
+			read -p "强烈建议先备份全部网站数据，再卸载LDNMP环境。确定删除所有网站数据吗？(Y/N): " choice
+			case "$choice" in
+			  [Yy])
+			    docker rm -f nginx php php74 mysql redis
+			    docker rmi nginx php:fpm php:7.4.33-fpm mysql redis
+			    rm -r /home/web
+			    ;;
+			  [Nn])
+			
+			    ;;
+			  *)
+			    echo "无效的选择，请输入 Y 或 N。"
+			    ;;
+			esac
                         ;;			
                     0)
                         solin
