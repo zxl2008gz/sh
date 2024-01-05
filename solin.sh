@@ -1136,7 +1136,7 @@ while true; do
    			cd /home/web/html
       			mkdir $yuming
      	 		cd $yuming
-    			mkdir - /home/web/html/$yuming/vaultwarden
+    			mkdir -p /home/web/html/$yuming/vaultwarden
 
 	  		docker run -d --name vaultwarden \
 			--restart=always \
@@ -1172,7 +1172,8 @@ while true; do
    			cd /home/web/html
       			mkdir $yuming
      	 		cd $yuming
-    			mkdir - /home/web/html/$yuming/epusdt			
+    			mkdir -p /home/web/html/$yuming/epusdt
+       			cd epusdt
       			chmod 777 -R /home/web/html/$yuming/epusdt
 	 
     			dbname=$(echo "$yuming" | sed -e 's/[^A-Za-z0-9]/_/g')
