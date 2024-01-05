@@ -2502,36 +2502,36 @@ EOF
 	                      3)
 	                      current_port=$(grep -E '^ *Port [0-9]+' /etc/ssh/sshd_config | awk '{print $2}')
 	
-	                      cat > /etc/iptables/rules.v4 << EOF
-			      *filter
-			      :INPUT ACCEPT [0:0]
-			      :FORWARD ACCEPT [0:0]
-			      :OUTPUT ACCEPT [0:0]
-			      -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-			      -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-			      -A INPUT -i lo -j ACCEPT
-			      -A FORWARD -i lo -j ACCEPT
-			      -A INPUT -p tcp --dport $current_port -j ACCEPT
-			      COMMIT
-			      EOF
+	                                          cat > /etc/iptables/rules.v4 << EOF
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A FORWARD -i lo -j ACCEPT
+-A INPUT -p tcp --dport $current_port -j ACCEPT
+COMMIT
+EOF
 	                      iptables-restore < /etc/iptables/rules.v4
 	
 	                          ;;
 	                      4)
 	                      current_port=$(grep -E '^ *Port [0-9]+' /etc/ssh/sshd_config | awk '{print $2}')
 	
-	                      cat > /etc/iptables/rules.v4 << EOF
-			      *filter
-			      :INPUT DROP [0:0]
-			      :FORWARD DROP [0:0]
-			      :OUTPUT ACCEPT [0:0]
-			      -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-			      -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-			      -A INPUT -i lo -j ACCEPT
-			      -A FORWARD -i lo -j ACCEPT
-			      -A INPUT -p tcp --dport $current_port -j ACCEPT
-			      COMMIT
-			      EOF
+                      cat > /etc/iptables/rules.v4 << EOF
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A FORWARD -i lo -j ACCEPT
+-A INPUT -p tcp --dport $current_port -j ACCEPT
+COMMIT
+EOF
 	                      iptables-restore < /etc/iptables/rules.v4
 	
 	                          ;;
@@ -2602,18 +2602,18 @@ EOF
 	
 	          current_port=$(grep -E '^ *Port [0-9]+' /etc/ssh/sshd_config | awk '{print $2}')
 	
-	          cat > /etc/iptables/rules.v4 << EOF
-		  *filter
-		  :INPUT DROP [0:0]
-		  :FORWARD DROP [0:0]
-		  :OUTPUT ACCEPT [0:0]
-		  -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-		  -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-		  -A INPUT -i lo -j ACCEPT
-		  -A FORWARD -i lo -j ACCEPT
-		  -A INPUT -p tcp --dport $current_port -j ACCEPT
-		  COMMIT
-		  EOF
+          cat > /etc/iptables/rules.v4 << EOF
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A FORWARD -i lo -j ACCEPT
+-A INPUT -p tcp --dport $current_port -j ACCEPT
+COMMIT
+EOF
 	
 	          iptables-restore < /etc/iptables/rules.v4
 	          systemctl enable netfilter-persistent
