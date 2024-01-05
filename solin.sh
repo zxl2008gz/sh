@@ -1186,11 +1186,11 @@ while true; do
 
       			wget -O /home/web/html/$yuming/epusdt/epusdt.sql https://raw.githubusercontent.com/zxl2008gz/docker/main/epusdt/epusdt.sql
 			# 设定数据文件的路径，你需要根据实际情况修改此路径
-        		datafile="/home/web/html/${yuming}/epusdt/upusdt.sql"
+        		datafile="/home/web/html/${yuming}/epusdt/epusdt.sql"
 	
 			# 导入数据
-        		# docker exec -i mysql mysql -u "$dbuse" -p"$dbusepasswd" "$dbname" < "$datafile"	
-	  		docker exec -i mysql sh -c 'exec mysql -u"$dbuse" -p"$dbusepasswd" "$dbname"' < "$datafile"
+        		docker exec -i mysql mysql -u "$dbuse" -p"$dbusepasswd" "$dbname" < "$datafile"	
+	  		# docker exec -i mysql sh -c 'exec mysql -u"$dbuse" -p"$dbusepasswd" "$dbname"' < "$datafile"
  		
     			wget -O /home/web/html/$yuming/epusdt/epusdt.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/epusdt/epusdt.conf
        			sed -i "s/yuming.com/$yuming/g" /home/web/html/$yuming/epusdt/epusdt.conf
@@ -1327,12 +1327,176 @@ while true; do
                         ;;		
                     31)
                         # 站点数据管理
+			while true; do
+        			clear
+        			echo "LDNMP环境"
+        			echo "------------------------"
+        			# 获取nginx版本
+        			nginx_version=$(docker exec nginx nginx -v 2>&1)
+        			nginx_version=$(echo "$nginx_version" | grep -oP "nginx/\K[0-9]+\.[0-9]+\.[0-9]+")
+        			echo -n "nginx : v$nginx_version"
+        			# 获取mysql版本
+        			dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+        			mysql_version=$(docker exec mysql mysql -u root -p"$dbrootpasswd" -e "SELECT VERSION();" 2>/dev/null | tail -n 1)
+        			echo -n "            mysql : v$mysql_version"
+        			# 获取php版本
+        			php_version=$(docker exec php php -v 2>/dev/null | grep -oP "PHP \K[0-9]+\.[0-9]+\.[0-9]+")
+        			echo -n "            php : v$php_version"
+        			# 获取redis版本
+        			redis_version=$(docker exec redis redis-server -v 2>&1 | grep -oP "v=+\K[0-9]+\.[0-9]+")
+        			echo "            redis : v$redis_version"
+        			echo "------------------------"
+        			echo ""
+
+
+        			# ls -t /home/web/conf.d | sed 's/\.[^.]*$//'
+        			echo "站点信息                      证书到期时间"
+        			echo "------------------------"
+        			for cert_file in /home/web/certs/*_cert.pem; do
+          				domain=$(basename "$cert_file" | sed 's/_cert.pem//')
+          				if [ -n "$domain" ]; then
+            					expire_date=$(openssl x509 -noout -enddate -in "$cert_file" | awk -F'=' '{print $2}')
+            					formatted_date=$(date -d "$expire_date" '+%Y-%m-%d')
+            					printf "%-30s%s\n" "$domain" "$formatted_date"
+          				fi
+        			done
+
+        			echo "------------------------"
+        			echo ""
+        			echo "数据库信息"
+        			echo "------------------------"
+        			dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+        			docker exec mysql mysql -u root -p"$dbrootpasswd" -e "SHOW DATABASES;" 2> /dev/null | grep -Ev "Database|information_schema|mysql|performance_schema|sys"
+
+        			echo "------------------------"
+        			echo ""
+        			echo "操作"
+        			echo "------------------------"
+        			echo "1. 申请/更新域名证书               2. 更换站点域名"
+        			echo -e "3. 清理站点缓存                    4. 查看站点分析报告 \033[33mNEW\033[0m"
+        			echo "------------------------"
+        			echo "7. 删除指定站点                    8. 删除指定数据库"
+        			echo "------------------------"
+        			echo "0. 返回上一级选单"
+        			echo "------------------------"
+        			read -p "请输入你的选择: " sub_choice
+        			case $sub_choice in
+            			  1)
+                		    read -p "请输入你的域名: " yuming
+                		    install_ssltls
+
+                		    ;;
+
+            			  2)
+                		    read -p "请输入旧域名: " oddyuming
+                		    read -p "请输入新域名: " yuming
+                		    mv /home/web/conf.d/$oddyuming.conf /home/web/conf.d/$yuming.conf
+                		    sed -i "s/$oddyuming/$yuming/g" /home/web/conf.d/$yuming.conf
+                		    mv /home/web/html/$oddyuming /home/web/html/$yuming
+
+                		    rm /home/web/certs/${oddyuming}_key.pem
+                		    rm /home/web/certs/${oddyuming}_cert.pem
+                		    install_ssltls
+
+                		    ;;
+            			3)
+                		    docker exec -it nginx rm -rf /var/cache/nginx
+                		    docker restart nginx
+                 		    ;;
+            			4)
+                		    install goaccess
+                		    goaccess --log-format=COMBINED /home/web/log/nginx/access.log
+
+               			    ;;
+
+            			7)
+		                    read -p "请输入你的域名: " yuming
+		                    rm -r /home/web/html/$yuming
+		                    rm /home/web/conf.d/$yuming.conf
+		                    rm /home/web/certs/${yuming}_key.pem
+		                    rm /home/web/certs/${yuming}_cert.pem
+		                    docker restart nginx
+		                    ;;
+			    	8)
+				    read -p "请输入数据库名: " shujuku
+				    dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+				    docker exec mysql mysql -u root -p"$dbrootpasswd" -e "DROP DATABASE $shujuku;" 2> /dev/null
+				    ;;
+			    	0)
+				    break  # 跳出循环，退出菜单
+				    ;;
+			    	*)
+				    break  # 跳出循环，退出菜单
+				    ;;
+			esac
+		    done
                         ;;		
                     32)
-                        # 备份全站数据
+                        clear
+			# 备份全站数据
+      			cd /home/ && tar czvf web_$(date +"%Y%m%d%H%M%S").tar.gz web
+
+      			while true; do
+				clear
+				read -p "要传送文件到远程服务器吗？(Y/N): " choice
+				case "$choice" in
+				  [Yy])
+				    read -p "请输入远端服务器IP:  " remote_ip
+				    if [ -z "$remote_ip" ]; then
+				      echo "错误: 请输入远端服务器IP。"
+				      continue
+				    fi
+				    latest_tar=$(ls -t /home/*.tar.gz | head -1)
+				    if [ -n "$latest_tar" ]; then
+				      ssh-keygen -f "/root/.ssh/known_hosts" -R "$remote_ip"
+				      sleep 2  # 添加等待时间
+				      scp -o StrictHostKeyChecking=no "$latest_tar" "root@$remote_ip:/home/"
+				      echo "文件已传送至远程服务器home目录。"
+				    else
+				      echo "未找到要传送的文件。"
+				    fi
+				    break
+				    ;;
+				  [Nn])
+				    break
+				    ;;
+				  *)
+				    echo "无效的选择，请输入 Y 或 N。"
+				    ;;
+		        esac
+		      done
                         ;;		
                     33)
                         # 定时远程备份
+			 clear
+			read -p "输入远程服务器IP: " useip
+			read -p "输入远程服务器密码: " usepasswd
+			
+			wget -O ${useip}_beifen.sh https://raw.githubusercontent.com/kejilion/sh/main/beifen.sh > /dev/null 2>&1
+			chmod +x ${useip}_beifen.sh
+			
+			sed -i "s/0.0.0.0/$useip/g" ${useip}_beifen.sh
+			sed -i "s/123456/$usepasswd/g" ${useip}_beifen.sh
+			
+			echo "------------------------"
+			echo "1. 每周备份                 2. 每天备份"
+			read -p "请输入你的选择: " dingshi
+			
+			case $dingshi in
+			  1)
+			      read -p "选择每周备份的星期几 (0-6，0代表星期日): " weekday
+			      (crontab -l ; echo "0 0 * * $weekday ./${useip}_beifen.sh") | crontab - > /dev/null 2>&1
+			      ;;
+			  2)
+			      read -p "选择每天备份的时间（小时，0-23）: " hour
+			      (crontab -l ; echo "0 $hour * * * ./${useip}_beifen.sh") | crontab - > /dev/null 2>&1
+			      ;;
+			  *)
+			      break  # 跳出
+			      ;;
+			esac
+			
+			install sshpass
                         ;;		
                     34)
                         # 还原全站数据
