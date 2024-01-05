@@ -1166,8 +1166,7 @@ while true; do
                     8)
                         clear
 			# 安装epusdt收款地址
-			add_yuming
-      			install_ssltls
+			
 
    			cd /home/web/html
       			mkdir $yuming
