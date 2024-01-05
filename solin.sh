@@ -202,14 +202,14 @@ clean_service(){
 
     # Debian-based systems
     if [ -f "/etc/debian_version" ]; then        
-        echo "检测到基于Debian的系统。"
-        clean_debian
+		echo "检测到基于Debian的系统。"
+		clean_debian
     fi
 
     # Red Hat-based systems
     if [ -f "/etc/redhat-release" ]; then
-        echo "检测到基于Red Hat的系统。"
-        clean_redhat
+		echo "检测到基于Red Hat的系统。"
+		clean_redhat
     fi
 }
 
