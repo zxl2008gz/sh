@@ -352,10 +352,10 @@ install_ldnmp() {
 		remaining=$(( 50 - completed ))
 		progressBar="["
 		for ((j = 0; j < completed; j++)); do
-		  progressBar+="#"
+			progressBar+="#"
 		done
 		for ((j = 0; j < remaining; j++)); do
-		  progressBar+="."
+			progressBar+="."
 		done
 		progressBar+="]"
 		echo -ne "\r[$percentage%] $progressBar"
@@ -1017,7 +1017,7 @@ while true; do
 						install_ssltls
 						add_db
 	 
-						home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/dujiaoka/dujiaoka.com.conf
+						wget -O home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/dujiaoka/dujiaoka.com.conf
 						sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
 
 						cd /home/web/html
