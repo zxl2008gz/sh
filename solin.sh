@@ -1186,7 +1186,7 @@ while true; do
 						docker run -d \
 						--name epusdt \
 						--restart=always \
-						--network my-network \
+						--network web_default \
 						-p 8000:8000 \
 						-e mysql_host=mysql \
 						-e mysql_database=$dbname \
