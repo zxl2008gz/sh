@@ -983,7 +983,7 @@ while true; do
 						# 安装可道云桌面
 						add_yuming
 						install_ssltls
-							add_db
+						add_db
 
 						wget -O /home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/kodbox/kodbox.com.conf
 						sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
@@ -1063,12 +1063,15 @@ while true; do
 						cd /home/web/html
 						mkdir $yuming
 						cd $yuming
+						
+						dbusepasswd=$(grep -oP 'MYSQL_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+						read -p "请输入你的OPENAI_API_KEY: " apikey
 	 
 						docker run  -d --name lobe-chat \
 						--restart always \
 						-p 8089:3210 \
-						-e OPENAI_API_KEY=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 \
-						-e ACCESS_CODE=860210 \
+						-e OPENAI_API_KEY=$apikey \
+						-e ACCESS_CODE=$dbusepasswd \
 						-e HIDE_USER_API_KEY=1 \
 						-e BASE_URL=https://api.openai.com \
 						lobehub/lobe-chat
@@ -1089,13 +1092,15 @@ while true; do
 
 						cd /home/web/html
 						mkdir $yuming
-						cd $yuming
+						cd $yuming						
+						
+						read -p "请输入你的GEMINI_API_KEY: " apikey
 
 						docker run --name geminiprochat \
 						--restart always \
 						-p 3030:3000 \
 						-itd \
-						-e GEMINI_API_KEY=AIzaSyDL3wR-ncjvgZeJEvX2Yg2WLLbSGEN4bo4 \
+						-e GEMINI_API_KEY=$apikey \
 						howie6879/geminiprochat:v0.1.0
 
 						duankou=3030
@@ -1170,8 +1175,7 @@ while true; do
 						docker exec -i mysql mysql -u "$dbuse" -p"$dbusepasswd" "$dbname" < "$datafile"		  		
  		
 						wget -O /home/web/html/$yuming/epusdt/epusdt.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/epusdt/epusdt.conf
-						sed -i "s/yuming.com/$yuming/g" /home/web/html/$yuming/epusdt/epusdt.conf
-						sed -i "s/mysql_database=epusdt/mysql_database=$dbname/g" /home/web/html/$yuming/epusdt/epusdt.conf	
+						sed -i "s/yuming.com/$yuming/g" /home/web/html/$yuming/epusdt/epusdt.conf	
 						sed -i "s/mysql_user=epusdt/mysql_user=$dbuse/g" /home/web/html/$yuming/epusdt/epusdt.conf	
 						sed -i "s/changeyourpassword/$dbusepasswd/g" /home/web/html/$yuming/epusdt/epusdt.conf	
 						read -p "请输入你的tg机器人token: " tg_bot_token
@@ -1188,7 +1192,7 @@ while true; do
 						-e mysql_database=$dbname \
 						-e mysql_user=$dbuse \
 						-e mysql_passwd=$dbusepasswd \
-						-v /home/web/html/$yuming/epusdt/epusdt.conf:/app/.env \
+						-v $(pwd)/epusdt.conf:/app/.env \
 						stilleshan/epusdt
 
 						duankou=8000
