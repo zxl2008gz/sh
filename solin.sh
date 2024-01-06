@@ -1018,6 +1018,7 @@ while true; do
 						add_db
 	 
 						wget -O /home/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/dujiaoka/dujiaoka.com.conf
+	  
 						sed -i "s/yuming.com/$yuming/g" /home/web/conf.d/$yuming.conf
 
 						cd /home/web/html
