@@ -1216,6 +1216,9 @@ while true; do
 
 					9)
 						clear
+						add_yuming
+						install_ssltls
+						
 						docker_name="PandoraNext"
 						docker_img="pengzhile/pandora-next"
 						docker_port=8181
@@ -1314,6 +1317,9 @@ while true; do
 									sed -i "s/webgptpasswd/$webgptpasswd1/g" /home/docker/PandoraNext/data/config.json
 
 									$docker_rum
+									duankou=8181
+									reverse_proxy
+									
 									clear
 									echo "$docker_name 已经安装完成"
 									echo "------------------------"
@@ -1332,7 +1338,7 @@ while true; do
 							esac
 						fi
 
-						  ;;
+						;;
 						
                     21)
 						clear
