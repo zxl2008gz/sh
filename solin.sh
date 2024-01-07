@@ -1305,16 +1305,18 @@ while true; do
 									clear
 									echo "获取license_id请访问: https://dash.pandoranext.com/"
 									read -p "请输入你的GitHub的license_id: " github1
+									read -p "请输入你的网页登录界面: " site_pswd
 
 									install_docker
 
 									mkdir -p /home/docker/PandoraNext/{data,sessions}
 									cd /home/docker/PandoraNext/data
-									wget https://raw.githubusercontent.com/zxl2008gz/docker/main/PandoraNext/config.json
+									wget https://raw.githubusercontent.com/zxl2008gz/docker/main/PandoraNext/config.json									
 									wget https://raw.githubusercontent.com/zxl2008gz/docker/main/PandoraNext/tokens.json
 									sed -i "s/github/$github1/g" /home/docker/PandoraNext/data/config.json
 									webgptpasswd1=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c16)
 									sed -i "s/webgptpasswd/$webgptpasswd1/g" /home/docker/PandoraNext/data/config.json
+									sed -i "s/site_pswd123/$site_pswd/g" /home/docker/PandoraNext/data/tokens.json
 
 									$docker_rum
 									duankou=8181
