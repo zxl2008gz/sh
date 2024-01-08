@@ -297,7 +297,7 @@ install() {
 # 安装依赖
 install_dependency() {
 	clear
-	install wget socat unzip tar 
+	install wget socat unzip tar iptables
 }
 
 install_ldnmp() {
@@ -1067,22 +1067,24 @@ while true; do
 						
 						dbusepasswd=$(grep -oP 'MYSQL_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
 						read -p "请输入你的OPENAI_API_KEY: " apikey
+						read -p "请输入你需要设置的端口: " listen_port
 	 
 						docker run  -d --name lobe-chat \
 						--restart always \
-						-p 8089:3210 \
+						-p $listen_port:3210 \
 						-e OPENAI_API_KEY=$apikey \
 						-e ACCESS_CODE=$dbusepasswd \
 						-e HIDE_USER_API_KEY=1 \
 						-e BASE_URL=https://api.openai.com \
 						lobehub/lobe-chat
 
-						duankou=8089
+						duankou=$listen_port
 						reverse_proxy
 
 						clear
 						echo "您的LobeChat聊天网站搭建好了！"
 						echo "https://$yuming"
+						echo "端口号：duankou"
 						nginx_status
                         ;;
                     6)
@@ -1096,20 +1098,22 @@ while true; do
 						cd $yuming						
 						
 						read -p "请输入你的GEMINI_API_KEY: " apikey
+						read -p "请输入你需要设置的端口: " listen_port
 
 						docker run --name geminiprochat \
 						--restart always \
-						-p 3030:3000 \
+						-p $listen_port:3000 \
 						-itd \
 						-e GEMINI_API_KEY=$apikey \
 						howie6879/geminiprochat:v0.1.0
 
-						duankou=3030
+						duankou=$listen_port
 						reverse_proxy
 	 
 						clear
 						echo "您的GeminiPro聊天网站搭建好了！"
 						echo "https://$yuming"
+						echo "端口号：duankou"
 						nginx_status	 		
                         ;;	
                     7)
@@ -1122,10 +1126,12 @@ while true; do
 						mkdir $yuming
 						cd $yuming
 						mkdir -p /home/web/html/$yuming/vaultwarden
+						
+						read -p "请输入你需要设置的端口: " listen_port
 
 						docker run -d --name vaultwarden \
 						--restart=always \
-						-p 8888:8080 \
+						-p $listen_port:8080 \
 						-e ROCKET_PORT=8080 \
 						-e WEBSOCKET_ENABLED=true \
 						-e SIGNUPS_ALLOWED=true \
@@ -1140,12 +1146,13 @@ while true; do
 						-v /home/web/html/$yuming/vaultwarden:/data \
 						vaultwarden/server:latest
 
-						duankou=8888
+						duankou=$listen_port
 						reverse_proxy   		
 
 						clear
 						echo "您的vaultwarden聊天网站搭建好了！"
 						echo "https://$yuming"
+						echo "端口号：duankou"
 						nginx_status   			
                         ;;
                     8)
@@ -1184,11 +1191,13 @@ while true; do
 						read -p "请输入你的tgid: " tg_id
 						sed -i "s/你的tgid/$tg_id/g" /home/web/html/$yuming/epusdt/epusdt.conf      
 
+						read -p "请输入你需要设置的端口: " listen_port
+
 						docker run -d \
 						--name epusdt \
 						--restart=always \
 						--network web_default \
-						-p 8000:8000 \
+						-p $listen_port:8000 \
 						-e mysql_host=mysql \
 						-e mysql_database=$dbname \
 						-e mysql_user=$dbuse \
@@ -1196,7 +1205,7 @@ while true; do
 						-v $(pwd)/epusdt.conf:/app/.env \
 						stilleshan/epusdt
 
-						duankou=8000
+						duankou=$listen_port
 						reverse_proxy   		
 
 						clear
