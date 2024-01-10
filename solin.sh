@@ -490,6 +490,90 @@ restart_ldnmp() {
 	docker restart nginx
 }
 
+
+docker_app() {
+	if docker inspect "$docker_name" &>/dev/null; then
+		clear
+		echo "$docker_name 已安装，访问地址: "
+		ipv4_address
+		echo "http:$ipv4_address:$docker_port"
+		echo ""
+		echo "应用操作"
+		echo "------------------------"
+		echo "1. 更新应用             2. 卸载应用"
+		echo "------------------------"
+		echo "0. 返回上一级选单"
+		echo "------------------------"
+		read -p "请输入你的选择: " sub_choice
+
+		case $sub_choice in
+			1)
+				clear
+				docker rm -f "$docker_name"
+				docker rmi -f "$docker_img"
+				# 安装 Docker（请确保有 install_docker 函数）
+				install_docker
+				$docker_rum
+				clear
+				echo "$docker_name 已经安装完成"
+				echo "------------------------"
+				# 获取外部 IP 地址
+				ipv4_address
+				echo "您可以使用以下地址访问:"
+				echo "http:$ipv4_address:$docker_port"
+				$docker_use
+				$docker_passwd
+				;;
+			2)
+				clear
+				docker rm -f "$docker_name"
+				docker rmi -f "$docker_img"
+				rm -rf "/home/docker/$docker_name"
+				echo "应用已卸载"
+				;;
+			0)
+				# 跳出循环，退出菜单
+				;;
+			*)
+				# 跳出循环，退出菜单
+				;;
+		esac
+	else
+		clear
+		echo "安装提示"
+		echo "$docker_describe"
+		echo "$docker_url"
+		echo ""
+
+		# 提示用户确认安装
+		read -p "确定安装吗？(Y/N): " choice
+		case "$choice" in
+			[Yy])
+				clear
+				# 安装 Docker（请确保有 install_docker 函数）
+				install_docker
+				$docker_rum
+				clear
+				echo "$docker_name 已经安装完成"
+				echo "------------------------"
+				# 获取外部 IP 地址
+				ipv4_address
+				echo "您可以使用以下地址访问:"
+				echo "http:$ipv4_address:$docker_port"
+				$docker_use
+				$docker_passwd
+				;;
+			[Nn])
+				# 用户选择不安装
+				;;
+			*)
+				# 无效输入
+				;;
+		esac
+	fi
+}
+
+
 # 主循环，用于显示菜单并处理用户输入
 while true; do
     clear  # 清除屏幕
@@ -506,7 +590,8 @@ while true; do
     echo "3. 系统清理"
     echo "4. Docker管理 ▶ "
     echo -e "\033[33m5. LDNMP建站 ▶ \033[0m"
-    echo "6. 系统工具 ▶ "
+    echo "6. 面板工具 ▶ "	
+    echo "7. 系统工具 ▶ "
     echo "------------------------"
     echo "00. 脚本更新"
     echo "------------------------"
@@ -1863,7 +1948,213 @@ while true; do
 					break_end  # 跳出循环，退出菜单
 			done
 			;;
-        6)
+			
+		6)	
+			while true; do
+				clear
+				echo "▶ 面板工具"
+				echo "------------------------"
+				echo "1. NginxProxyManager可视化面板          2. Poste.io邮件服务器程序"
+				echo "3. Speedtest测速服务面板                4. portainer容器管理面板"
+				echo "------------------------"
+				echo "0. 返回主菜单"
+				echo "------------------------"
+				read -p "请输入你的选择: " sub_choice
+
+				case $sub_choice in
+					1)
+						docker_name="npm"
+						docker_img="jc21/nginx-proxy-manager:latest"
+						docker_port=81
+						docker_rum="docker run -d \
+									  --name=$docker_name \
+									  -p 80:80 \
+									  -p 81:$docker_port \
+									  -p 443:443 \
+									  -v /home/docker/npm/data:/data \
+									  -v /home/docker/npm/letsencrypt:/etc/letsencrypt \
+									  --restart=always \
+									  $docker_img"
+						docker_describe="如果您已经安装了其他面板工具或者LDNMP建站环境，建议先卸载，再安装npm！"
+						docker_url="官网介绍: https://nginxproxymanager.com/"
+						docker_use="echo \"初始用户名: admin@example.com\""
+						docker_passwd="echo \"初始密码: changeme\""
+						
+						docker_app
+						;;					
+					2)
+						if docker inspect mailserver &>/dev/null; then
+
+							clear
+							echo "poste.io已安装，访问地址: "
+							yuming=$(cat /home/docker/mail.txt)
+							echo "https://$yuming"
+							echo ""
+
+							echo "应用操作"
+							echo "------------------------"
+							echo "1. 更新应用             2. 卸载应用"
+							echo "------------------------"
+							echo "0. 返回上一级选单"
+							echo "------------------------"
+							read -p "请输入你的选择: " sub_choice
+
+							case $sub_choice in
+								1)
+									clear
+									docker rm -f mailserver
+									docker rmi -f analogic/poste.io
+									install_docker
+									yuming=$(cat /home/docker/mail.txt)
+									docker run \
+										--net=host \
+										-e TZ=Europe/Prague \
+										-v /home/docker/mail:/data \
+										--name "mailserver" \
+										-h "$yuming" \
+										--restart=always \
+										-d analogic/poste.io
+
+									clear
+									echo "poste.io已经安装完成"
+									echo "------------------------"
+									echo "您可以使用以下地址访问poste.io:"
+									echo "https://$yuming"
+									echo ""
+									;;
+								2)
+									clear
+									docker rm -f mailserver
+									docker rmi -f analogic/poste.io
+									rm /home/docker/mail.txt
+									rm -rf /home/docker/mail
+									echo "应用已卸载"
+									;;
+								0)
+									break  # 跳出循环，退出菜单
+									;;
+								*)
+									break  # 跳出循环，退出菜单
+									;;
+							esac
+						else
+							clear
+							install telnet
+
+							clear
+							echo ""
+							echo "端口检测"
+							port=25
+							timeout=3
+
+							if echo "quit" | timeout $timeout telnet smtp.qq.com $port | grep 'Connected'; then
+							  echo -e "\e[32m端口$port当前可用\e[0m"
+							else
+							  echo -e "\e[31m端口$port当前不可用\e[0m"
+							fi
+							echo "------------------------"
+							echo ""
+
+
+							echo "安装提示"
+							echo "poste.io一个邮件服务器，确保80和443端口没被占用，确保25端口开放"
+							echo "官网介绍: https://hub.docker.com/r/analogic/poste.io"
+							echo ""
+
+							# 提示用户确认安装
+							read -p "确定安装poste.io吗？(Y/N): " choice
+							case "$choice" in
+								[Yy])
+								clear
+
+								read -p "请设置邮箱域名 例如 mail.yuming.com : " yuming
+								mkdir -p /home/docker      # 递归创建目录
+								echo "$yuming" > /home/docker/mail.txt  # 写入文件
+								echo "------------------------"
+								ipv4_address
+								echo "先解析这些DNS记录"
+								echo "A           mail            $ipv4_address"
+								echo "CNAME       imap            $yuming"
+								echo "CNAME       pop             $yuming"
+								echo "CNAME       smtp            $yuming"
+								echo "MX          @               $yuming"
+								echo "TXT         @               v=spf1 mx ~all"
+								echo "TXT         ?               ?"
+								echo ""
+								echo "------------------------"
+								echo "按任意键继续..."
+								read -n 1 -s -r -p ""
+
+								install_docker
+
+								docker run \
+									--net=host \
+									-e TZ=Europe/Prague \
+									-v /home/docker/mail:/data \
+									--name "mailserver" \
+									-h "$yuming" \
+									--restart=always \
+									-d analogic/poste.io
+
+								clear
+								echo "poste.io已经安装完成"
+								echo "------------------------"
+								echo "您可以使用以下地址访问poste.io:"
+								echo "https://$yuming"
+								echo ""
+
+									;;
+								[Nn])
+									;;
+								*)
+									;;
+							esac
+						fi						
+						;;	
+						
+					3)
+						docker_name="looking-glass"
+						docker_img="wikihostinc/looking-glass-server"
+						docker_port=89
+						docker_rum="docker run -d --name looking-glass --restart always -p 89:80 wikihostinc/looking-glass-server"
+						docker_describe="Speedtest测速面板是一个VPS网速测试工具，多项测试功能，还可以实时监控VPS进出站流量"
+						docker_url="官网介绍: https://github.com/wikihost-opensource/als"
+						docker_use=""
+						docker_passwd=""
+						docker_app
+						;;	
+
+					4)
+						docker_name="portainer"
+						docker_img="portainer/portainer"
+						docker_port=9050
+						docker_rum="docker run -d \
+								--name portainer \
+								-p 9050:9000 \
+								-v /var/run/docker.sock:/var/run/docker.sock \
+								-v /home/docker/portainer:/data \
+								--restart always \
+								portainer/portainer"
+						docker_describe="portainer是一个轻量级的docker容器管理面板"
+						docker_url="官网介绍: https://www.portainer.io/"
+						docker_use=""
+						docker_passwd=""
+						docker_app
+						;;
+						
+					0)
+						solin
+						;;
+					*)
+						echo "无效的输入!"
+						;;
+				esac
+				break_end
+
+			done
+			;;			
+			
+        7)
             # 系统工具逻辑
 			while true; do
 				clear
