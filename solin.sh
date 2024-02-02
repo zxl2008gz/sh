@@ -4066,7 +4066,17 @@ while true; do
         7)
             clear
             system_tool
-            ;;        
+            ;; 
+        00)
+            cd ~
+            #curl -sS -O https://raw.githubusercontent.com/kejilion/sh/main/update_log.sh && chmod +x update_log.sh && ./update_log.sh
+            #rm update_log.sh
+            echo ""
+            curl -sS -O https://raw.githubusercontent.com/zxl2008gz/sh/main/solin.sh && chmod +x solin.sh && ./solin.sh
+            echo "脚本已更新到最新版本！"
+            break_end
+            solin
+            ;;       
         0)
             # 退出脚本
             clear
