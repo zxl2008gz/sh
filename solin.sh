@@ -855,12 +855,12 @@ create_ldnmp_file() {
     # 创建必要的目录和文件
     mkdir -p /home/docker && cd /home/docker && mkdir -p web/html web/mysql web/certs web/conf.d web/redis web/log/nginx && touch web/docker-compose.yml
 
-    wget -O /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/nginx.conf
-    wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/default.conf
+    wget -O /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/nginx.conf
+    wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/default.conf
     default_server_ssl
 
     # 下载 docker-compose.yml 文件并进行替换
-    wget -O /home/docker/web/docker-compose.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/docker-compose.yml
+    wget -O /home/docker/web/docker-compose.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/docker-compose.yml
 
     dbrootpasswd=$(openssl rand -base64 16) && dbuse=$(openssl rand -hex 4) && dbusepasswd=$(openssl rand -base64 8)
 
@@ -1206,8 +1206,8 @@ dujiaoka_display() {
 install_nginx() {
     # 创建必要的目录和文件
     mkdir -p /home/docker && cd /home/docker && mkdir -p web/html web/mysql web/certs web/conf.d web/redis web/log/nginx && touch web/docker-compose.yml
-    wget -O  /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/nginx.conf
-    wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/default.conf
+    wget -O  /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/nginx.conf
+    wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/default.conf
     default_server_ssl
 
     docker rm -f nginx >/dev/null 2>&1
@@ -1563,8 +1563,8 @@ site_defense_program() {
         systemctl restart fail2ban
         docker rm -f nginx
 
-        wget -O /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/nginx.conf
-        wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LNMP/default.conf
+        wget -O /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/nginx.conf
+        wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/default.conf
         default_server_ssl
 
         #获取网络名称
@@ -2358,6 +2358,7 @@ install_onlyoffice() {
     docker_port=${project_port:-8082}
     [ -z "$project_port" ] && echo ""
     docker_img="onlyoffice/documentserver"
+    set_network_name "$mysql_redis_php_path"
     docker_run="docker run -d \
                     --name $docker_name \
                     -p $docker_port:80 \
