@@ -4068,13 +4068,13 @@ while true; do
             system_tool
             ;; 
         00)
-            cd ~
-            echo ""
-            curl -sS -O https://raw.githubusercontent.com/zxl2008gz/sh/main/solin.sh && chmod +x solin.sh && ./solin.sh
-            echo "脚本已更新到最新版本！"
-            break_end
-            solin
-            ;;       
+            # 脚本更新逻辑
+			echo ""
+			curl -sS -O https://raw.githubusercontent.com/zxl2008gz/sh/main/solin.sh && chmod +x solin.sh
+			echo "脚本已更新到最新版本！"
+			break_end
+			solin
+            ;;    
         0)
             # 退出脚本
             clear
