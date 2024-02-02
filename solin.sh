@@ -865,9 +865,9 @@ create_ldnmp_file() {
     dbrootpasswd=$(openssl rand -base64 16) && dbuse=$(openssl rand -hex 4) && dbusepasswd=$(openssl rand -base64 8)
 
     # 在 docker-compose.yml 文件中进行替换
-    sed -i "s/mysqlwebroot/$dbrootpasswd/g" /home/docker/web/docker-compose.yml
-    sed -i "s/mysqlpasswd/$dbusepasswd/g" /home/docker/web/docker-compose.yml
-    sed -i "s/mysqluse/$dbuse/g" /home/docker/web/docker-compose.yml
+    sed -i "s|mysqlwebroot|$dbrootpasswd|g" /home/docker/web/docker-compose.yml
+    sed -i "s|mysqlpasswd|$dbusepasswd|g" /home/docker/web/docker-compose.yml
+    sed -i "s|mysqluse|$dbuse|g" /home/docker/web/docker-compose.yml
 
     cd /home/docker/web && docker-compose up -d
 }
