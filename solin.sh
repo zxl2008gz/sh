@@ -1140,9 +1140,9 @@ kodbox_config() {
     mkdir $yuming
     cd $yuming
 
-    wget https://github.com/kalcaddle/kodbox/archive/refs/tags/1.42.04.zip
-    unzip -o 1.42.04.zip
-    rm 1.42.04.zip
+    wget https://github.com/kalcaddle/kodbox/archive/refs/tags/1.49.10.zip
+    unzip -o 1.49.10.zip
+    rm 1.49.10.zip
 }
 
 # kodbox 显示
