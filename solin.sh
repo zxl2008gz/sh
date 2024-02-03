@@ -1749,6 +1749,8 @@ install_ldnmp() {
                 install_onlyoffice_kodbox
                 restart_ldnmp
                 onlyoffice_kodbox_display
+                docker_port=8001
+                reverse_proxy
                 nginx_status
                 ;;
             5)
@@ -1759,6 +1761,7 @@ install_ldnmp() {
                 dujiaoka_config
                 restart_ldnmp
                 dujiaoka_display
+				reverse_proxy
                 nginx_status
                 ;;            
             21)
