@@ -1678,7 +1678,8 @@ install_ldnmp() {
         echo "2. 安装WordPress"
         echo "------------------------"
         echo "3. 安装可道云桌面"
-        echo "4. 安装独角数发卡网"              
+        echo "4. 安装onlyoffice可道云版本"
+        echo "5. 安装独角数发卡网"
         echo "------------------------"	
         echo "21. 安装epusdt收款地址          22. 安装LobeChat聊天网站" 
         echo "23. 安装GeminiPro聊天网站       24. 安装vaultwarden密码管理平台" 
@@ -1745,12 +1746,21 @@ install_ldnmp() {
                 clear
                 add_yuming
                 install_ssltls
+                install_onlyoffice_kodbox
+                restart_ldnmp
+                onlyoffice_kodbox_display
+                nginx_status
+                ;;
+            5)
+                clear
+                add_yuming
+                install_ssltls
                 add_db "$yuming" "/home/docker/web/docker-compose.yml"
                 dujiaoka_config
                 restart_ldnmp
                 dujiaoka_display
                 nginx_status
-                ;;
+                ;;            
             21)
                 clear
                 add_yuming
@@ -2343,6 +2353,35 @@ install_epusdt() {
     docker_app    
 }
 
+# onlyoffice在线办公OFFICE-kodbox版本
+install_onlyoffice_kodbox() {
+
+    cd ~ & wget https://static.kodcloud.com/kod/source/onlyoffice/7.4.1/officeData.zip & wget https://static.kodcloud.com/kod/source/onlyoffice/7.4.1/kodoffice.tar
+    
+    curl https://doc.kodcloud.com/tools/office/linux/install.sh | sh
+
+    sh ~/run_office.sh
+
+    rm -f ~/kodoffice.tar ~/officeData.zip
+
+}
+
+# onlyoffice_kodbox 显示
+onlyoffice_kodbox_display() {
+    clear
+    echo "您的onlyoffice可道云版本搭建好了！"
+    echo "https://$yuming"
+}
+
+# onlyoffice_kodbox 显示
+onlyoffice_kod_display() {
+    clear
+    echo "您的onlyoffice可道云版本搭建好了！"
+    ip_address
+    echo "http:$ipv4_address:8001"
+}
+
+
 # onlyoffice在线办公OFFICE
 install_onlyoffice() {
 
@@ -2595,10 +2634,10 @@ panel_tools() {
         echo "1. NginxProxyManager可视化面板          2. mysql-redis-php容器"        
         echo "3. 安装LobeChat聊天网站                 4. 安装GeminiPro聊天网站"
         echo "5. 安装vaultwarden密码管理平台          6. 安装kodbox可道云网盘 "
-        echo "7. 安装dujiaoka独角数发卡网             8. 安装epusdt收款地址 "
-        echo "9. onlyoffice在线办公OFFICE            10. Nextcloud网盘 "
-        echo "11. Speedtest测速服务面板              12. portainer容器管理面板 "
-        echo "13. Poste.io邮件服务器程序 "                   
+        echo "7. 安装onlyoffice可道云                8. 安装dujiaoka独角数发卡网  "
+        echo "9. 安装epusdt收款地址                  10. onlyoffice在线办公OFFICE "
+        echo "11. Nextcloud网盘                     12. Speedtest测速服务面板 "
+        echo "13. portainer容器管理面板              14. Poste.io邮件服务器程序 "                 
         echo "------------------------"
         echo "0. 返回主菜单"
         echo "------------------------"
@@ -2625,24 +2664,28 @@ panel_tools() {
                 install_kodbox "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
                 ;;
             7)
-                install_dujiaoka "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_onlyoffice_kodbox
+                onlyoffice_kod_display
                 ;;
             8)
-                install_epusdt "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_dujiaoka "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
                 ;;
             9)
-                install_onlyoffice "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_epusdt "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
                 ;;
             10)
+                install_onlyoffice "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;;
+            11)
                 install_nextcloud "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
                 ;;
-            11) 
+            12) 
                 install_speedtest "/home/docker/mysql_redis_php/docker-compose.yml"
                 ;;
-            12)
+            13)
                 install_portainer "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
                 ;;
-            13)
+            14)
                 install_Poste
                 ;;            
             0)
