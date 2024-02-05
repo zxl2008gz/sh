@@ -1759,7 +1759,6 @@ install_ldnmp() {
                 install_ssltls
                 add_db "$yuming" "/home/docker/web/docker-compose.yml"
                 dujiaoka_config
-                reverse_proxy
                 restart_ldnmp				
                 dujiaoka_display
                 nginx_status
