@@ -1208,6 +1208,14 @@ oracle_script() {
             5)
                 clear
                 set_rootpasswd
+	    0)
+		# 退出脚本
+		clear
+		exit
+		;;
+	    *)
+		echo "无效的选项，请重新输入！"
+		;;
         esac
         break_end
     done
