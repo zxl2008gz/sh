@@ -40,6 +40,29 @@ install() {
     return 0
 }
 
+# 卸载软件
+remove() {
+    if [ $# -eq 0 ]; then
+        echo "未提供软件包参数!"
+        return 1
+    fi
+
+    for package in "$@"; do
+        if command -v apt &>/dev/null; then
+            apt purge -y "$package"
+        elif command -v yum &>/dev/null; then
+            yum remove -y "$package"
+        elif command -v apk &>/dev/null; then
+            apk del "$package"
+        else
+            echo "未知的包管理器!"
+            return 1
+        fi
+    done
+
+    return 0
+}
+
 # 函数: 获取IPv4地址
 ip_address() {
     ipv4_address=$(curl -s ipv4.ip.sb)
@@ -51,74 +74,92 @@ show_system_info() {
     clear
     # 获取IP地址
 	ip_address
+
     # 获取CPU信息
-	cpu_info=$(case "$(uname -m)" in
-		x86_64) grep 'model name' /proc/cpuinfo | uniq | cut -d ':' -f2- | sed 's/^[ \t]*//' ;;
-		*) lscpu | grep 'Model name' | awk -F': ' '{print $2}' | sed 's/^[ \t]*//' ;;
-	esac)
+    if [ "$(uname -m)" == "x86_64" ]; then
+      cpu_info=$(cat /proc/cpuinfo | grep 'model name' | uniq | sed -e 's/model name[[:space:]]*: //')
+    else
+      cpu_info=$(lscpu | grep 'BIOS Model name' | awk -F': ' '{print $2}' | sed 's/^[ \t]*//')
+    fi
 
-	cpu_usage=$(awk '/^%Cpu/{print $2+$4}' <(top -bn1))
-	cpu_usage_percent=$(printf "%.2f%%" "$cpu_usage")
-
-	cpu_cores=$(nproc)
-
-	# 使用free命令一次获取所有内存信息
-	read -r mem_total mem_used swap_total swap_used <<< $(free -m | awk '/^Mem|^Swap/{printf $2 " " $3 " "}')
-	mem_percentage=$(awk "BEGIN {printf \"%.2f\", ($mem_used/$mem_total)*100}")
-	swap_percentage=$(awk "BEGIN {printf \"%.2f\", ($swap_used/$swap_total)*100}")
-
-	mem_info="${mem_used}MB/${mem_total}MB ($mem_percentage%)"
-	swap_info="${swap_used}MB/${swap_total}MB ($swap_percentage%)"
-
-	disk_info=$(df -h / | awk 'NR==2{printf "%s/%s (%s)", $3, $2, $5}')
-
-	# 使用ipinfo.io的API一次性获取所有所需信息
-    geo_info=$(curl -s ipinfo.io)
-
-    # 使用 Bash 内置的方式提取信息
-    country=$(echo "$geo_info" | grep -o '"country": "[^"]*' | grep -o '[^"]*$')
-    city=$(echo "$geo_info" | grep -o '"city": "[^"]*' | grep -o '[^"]*$')
-    isp_info=$(echo "$geo_info" | grep -o '"org": "[^"]*' | grep -o '[^"]*$')
+    if [ -f /etc/alpine-release ]; then
+        # Alpine Linux 使用以下命令获取 CPU 使用率
+        cpu_usage_percent=$(top -bn1 | grep '^CPU' | awk '{print " "$4}' | cut -c 1-2)
+    else
+        # 其他系统使用以下命令获取 CPU 使用率
+        cpu_usage_percent=$(top -bn1 | grep "Cpu(s)" | awk '{print " "$2}')
+    fi
 
 
+    cpu_cores=$(nproc)
 
-	cpu_arch=$(uname -m)
-	hostname=$(hostname)
-	kernel_version=$(uname -r)
-	congestion_algorithm=$(sysctl -n net.ipv4.tcp_congestion_control)
-	queue_algorithm=$(sysctl -n net.core.default_qdisc)
+    mem_info=$(free -b | awk 'NR==2{printf "%.2f/%.2f MB (%.2f%%)", $3/1024/1024, $2/1024/1024, $3*100/$2}')
 
-	# 使用/etc/os-release文件获取系统信息
-	if [ -f "/etc/os-release" ]; then
-		os_info=$(source /etc/os-release && echo "$PRETTY_NAME")
-	else
-		os_info="Unknown"
-	fi
+    disk_info=$(df -h | awk '$NF=="/"{printf "%s/%s (%s)", $3, $2, $5}')
 
-	network_traffic=$(awk 'NR > 2 { rx += $2; tx += $10 } END { print rx, tx }' /proc/net/dev)
+    country=$(curl -s ipinfo.io/country)
+    city=$(curl -s ipinfo.io/city)
 
-    # 网络流量单位转换函数
-    convert_unit() {
-    local value=$1
-    local units=("Bytes" "KB" "MB" "GB")
-    local unit_index=0
+    isp_info=$(curl -s ipinfo.io/org)
 
-    while [ $(echo | awk -v value="$value" 'value >= 1024 {print "1"}') ] && [ $unit_index -lt 3 ]; do
-        value=$(echo | awk -v value="$value" 'BEGIN {printf "%.2f", value / 1024}')
-        unit_index=$((unit_index + 1))
-    done
+    cpu_arch=$(uname -m)
 
-    printf "%.2f %s\n" "$value" "${units[$unit_index]}"
-    }
+    hostname=$(hostname)
 
-	# 解析网络流量
-	read -r rx_total tx_total <<< "$network_traffic"
-	rx_info=$(convert_unit "$rx_total")
-	tx_info=$(convert_unit "$tx_total")
+    kernel_version=$(uname -r)
 
-	current_time=$(date "+%Y-%m-%d %I:%M %p")
+    congestion_algorithm=$(sysctl -n net.ipv4.tcp_congestion_control)
+    queue_algorithm=$(sysctl -n net.core.default_qdisc)
 
-	runtime=$(awk '{run_seconds=$1; run_days=int(run_seconds/86400); run_seconds%=86400; run_hours=int(run_seconds/3600); run_seconds%=3600; run_minutes=int(run_seconds/60); if (run_days > 0) printf("%d days ", run_days); if (run_hours > 0) printf("%d hours ", run_hours); printf("%d minutes\n", run_minutes)}' /proc/uptime)
+    # 尝试使用 lsb_release 获取系统信息
+    os_info=$(lsb_release -ds 2>/dev/null)
+
+    # 如果 lsb_release 命令失败，则尝试其他方法
+    if [ -z "$os_info" ]; then
+      # 检查常见的发行文件
+      if [ -f "/etc/os-release" ]; then
+        os_info=$(source /etc/os-release && echo "$PRETTY_NAME")
+      elif [ -f "/etc/debian_version" ]; then
+        os_info="Debian $(cat /etc/debian_version)"
+      elif [ -f "/etc/redhat-release" ]; then
+        os_info=$(cat /etc/redhat-release)
+      else
+        os_info="Unknown"
+      fi
+    fi
+
+    output=$(awk 'BEGIN { rx_total = 0; tx_total = 0 }
+        NR > 2 { rx_total += $2; tx_total += $10 }
+        END {
+            rx_units = "Bytes";
+            tx_units = "Bytes";
+            if (rx_total > 1024) { rx_total /= 1024; rx_units = "KB"; }
+            if (rx_total > 1024) { rx_total /= 1024; rx_units = "MB"; }
+            if (rx_total > 1024) { rx_total /= 1024; rx_units = "GB"; }
+
+            if (tx_total > 1024) { tx_total /= 1024; tx_units = "KB"; }
+            if (tx_total > 1024) { tx_total /= 1024; tx_units = "MB"; }
+            if (tx_total > 1024) { tx_total /= 1024; tx_units = "GB"; }
+
+            printf("总接收: %.2f %s\n总发送: %.2f %s\n", rx_total, rx_units, tx_total, tx_units);
+        }' /proc/net/dev)
+
+
+    current_time=$(date "+%Y-%m-%d %I:%M %p")
+
+
+    swap_used=$(free -m | awk 'NR==3{print $3}')
+    swap_total=$(free -m | awk 'NR==3{print $2}')
+
+    if [ "$swap_total" -eq 0 ]; then
+        swap_percentage=0
+    else
+        swap_percentage=$((swap_used * 100 / swap_total))
+    fi
+
+    swap_info="${swap_used}MB/${swap_total}MB (${swap_percentage}%)"
+
+    runtime=$(cat /proc/uptime | awk -F. '{run_days=int($1 / 86400);run_hours=int(($1 % 86400) / 3600);run_minutes=int(($1 % 3600) / 60); if (run_days > 0) printf("%d天 ", run_days); if (run_hours > 0) printf("%d时 ", run_hours); printf("%d分\n", run_minutes)}')
 
 	# 输出信息
 	cat << EOF
@@ -140,8 +181,7 @@ CPU占用: $cpu_usage_percent
 虚拟内存: $swap_info
 硬盘占用: $disk_info
 ------------------------
-总接收: $rx_info
-总发送: $tx_info
+$output
 ------------------------
 网络拥堵算法: $congestion_algorithm $queue_algorithm
 ------------------------
@@ -157,50 +197,24 @@ EOF
 
 # 函数：更新系统
 update_service() {
-    echo "开始更新系统..."
-
-    # 确保脚本以root权限运行
-    if [ "$(id -u)" != "0" ]; then
-        echo "错误：此脚本需要以root权限运行。"
-        return 1
-    fi
-
-    # 检测系统类型并执行更新
+    # Update system on Debian-based systems
     if [ -f "/etc/debian_version" ]; then
-        echo "检测到基于Debian的系统。"
-        if ! apt-get update -y; then
-            echo "更新软件包列表失败。"
-            return 1
-        fi
-        if ! apt-get upgrade -y; then
-            echo "升级软件包失败。"
-            return 1
-        fi
-    elif [ -f "/etc/redhat-release" ]; then
-        echo "检测到基于Red Hat的系统。"
-        if ! yum -y update; then
-            echo "更新软件包失败。"
-            return 1
-        fi
-    elif [ -f "/etc/arch-release" ]; then
-        echo "检测到Arch Linux系统。"
-        if ! pacman -Syu --noconfirm; then
-            echo "更新软件包失败。"
-            return 1
-        fi
-    else
-        echo "不支持的Linux发行版。"
-        return 1
+        apt update -y && DEBIAN_FRONTEND=noninteractive apt full-upgrade -y
     fi
 
-    echo "系统更新完成。"
-    return 0
+    # Update system on Red Hat-based systems
+    if [ -f "/etc/redhat-release" ]; then
+        yum -y update
+    fi
+
+    # Update system on Alpine Linux
+    if [ -f "/etc/alpine-release" ]; then
+        apk update && apk upgrade
+    fi
 }
 
 # 清理Debian系统
 clean_debian() {
-    echo "开始清理Debian系统..."
-
     # 确保脚本以root权限运行
     if [ "$(id -u)" != "0" ]; then
         echo "错误：此脚本需要以root权限运行。"
@@ -257,14 +271,12 @@ clean_debian() {
         fi
     fi
 
-    echo "Debian系统清理完成。"
+    echo "系统清理完成。"
     return 0
 }
 
 # 清理Red Hat-based systems系统
 clean_redhat() {
-    echo "开始清理基于Red Hat的系统..."
-
     # 确保脚本以root权限运行
     if [ "$(id -u)" != "0" ]; then
         echo "错误：此脚本需要以root权限运行。"
@@ -302,8 +314,44 @@ clean_redhat() {
         fi
     fi
 
-    echo "基于Red Hat的系统清理完成。"
+    echo "系统清理完成。"
     return 0
+}
+
+# 清理alpine系统
+clean_alpine() {
+    # 获取所有已安装的包
+    local installed_pkgs=$(apk info --installed | awk '{print $1}')
+    # 获取所有可用的包
+    local available_pkgs=$(apk info --available | awk '{print $1}')
+    # 确定哪些已安装的包不在可用的包列表中
+    local pkgs_to_remove=$(echo "${installed_pkgs}" | grep -v -F -x -e "${available_pkgs}")
+
+    # 如果有要删除的包，则删除它们
+    if [ -n "${pkgs_to_remove}" ]; then
+        echo "Removing packages not available in the apk repositories:"
+        echo "${pkgs_to_remove}"
+        apk del --purge ${pkgs_to_remove}
+    else
+        echo "No packages to remove."
+    fi
+
+    # 移除不再需要的依赖包
+    apk autoremove
+    
+    # 清理apk缓存
+    apk cache clean
+    
+    # 安全地删除/var/log下的文件和/var/cache/apk下的文件
+    if [ -d "/var/log" ]; then
+        echo "Cleaning /var/log"
+        rm -rf /var/log/*
+    fi
+    
+    if [ -d "/var/cache/apk" ]; then
+        echo "Cleaning /var/cache/apk"
+        rm -rf /var/cache/apk/*
+    fi
 }
 
 # 清理系统垃圾
@@ -322,24 +370,201 @@ clean_service() {
             echo "警告：系统同时检测到Debian和Red Hat标识。请手动选择要执行的清理操作。"
             return 1
         else
-            echo "检测到基于Debian的系统。"
             clean_debian
         fi
     elif [ -f "/etc/redhat-release" ]; then
-        echo "检测到基于Red Hat的系统。"
         clean_redhat
+    elif [ -f "/etc/alpine-release" ]; then
+        clean_alpine
     else
         echo "未能识别的系统类型或系统不支持。"
         return 1
     fi
 }
 
-# 定义安装 Docker 的函数
-install_docker() {
-    if ! command -v docker &>/dev/null; then
+# 常用工具
+common_tool() {
+    while true; do
+        clear
+        echo "▶ 安装常用工具"
+        echo "------------------------"
+        echo "1. curl 下载工具"
+        echo "2. wget 下载工具"
+        echo "3. sudo 超级管理权限工具"
+        echo "4. socat 通信连接工具 （申请域名证书必备）"
+        echo "5. htop 系统监控工具"
+        echo "6. iftop 网络流量监控工具"
+        echo "7. unzip ZIP压缩解压工具"
+        echo "8. tar GZ压缩解压工具"
+        echo "9. tmux 多路后台运行工具"
+        echo "10. ffmpeg 视频编码直播推流工具"
+        echo "11. btop 现代化监控工具"
+        echo "12. ranger 文件管理工具"
+        echo "13. gdu 磁盘占用查看工具"
+        echo "14. fzf 全局搜索工具"
+        echo "------------------------"
+        echo "31. 全部安装"
+        echo "32. 全部卸载"
+        echo "------------------------"
+        echo "41. 安装指定工具"
+        echo "42. 卸载指定工具"
+        echo "------------------------"
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            1)
+                clear
+                install curl
+                clear
+                echo "工具已安装，使用方法如下："
+                curl --help
+                ;;
+            2)
+                clear
+                install wget
+                clear
+                echo "工具已安装，使用方法如下："
+                wget --help
+                ;;
+            3)
+                clear
+                install sudo
+                clear
+                echo "工具已安装，使用方法如下："
+                sudo --help
+                ;;
+            4)
+                clear
+                install socat
+                clear
+                echo "工具已安装，使用方法如下："
+                socat -h
+                ;;
+            5)
+                clear
+                install htop
+                clear
+                htop
+                ;;
+            6)
+                clear
+                install iftop
+                clear
+                iftop
+                ;;
+            7)
+                clear
+                install unzip
+                clear
+                echo "工具已安装，使用方法如下："
+                unzip
+                ;;
+            8)
+                clear
+                install tar
+                clear
+                echo "工具已安装，使用方法如下："
+                tar --help
+                ;;
+            9)
+                clear
+                install tmux
+                clear
+                echo "工具已安装，使用方法如下："
+                tmux --help
+                ;;
+            10)
+                clear
+                install ffmpeg
+                clear
+                echo "工具已安装，使用方法如下："
+                ffmpeg --help
+                ;;
+
+            11)
+                clear
+                install btop
+                clear
+                btop
+                ;;
+            12)
+                clear
+                install ranger
+                cd /
+                clear
+                ranger
+                cd ~
+                ;;
+            13)
+                clear
+                install gdu
+                cd /
+                clear
+                gdu
+                cd ~
+                ;;
+            14)
+                clear
+                install fzf
+                cd /
+                clear
+                fzf
+                cd ~
+                ;;
+            31)
+                clear
+                install curl wget sudo socat htop iftop unzip tar tmux ffmpeg btop ranger gdu fzf
+                ;;
+
+            32)
+                clear
+                remove htop iftop unzip tmux ffmpeg btop ranger gdu fzf
+                ;;
+
+            41)
+                clear
+                read -p "请输入安装的工具名（wget curl sudo htop）: " installname
+                install $installname
+                ;;
+            42)
+                clear
+                read -p "请输入卸载的工具名（htop ufw tmux）: " removename
+                remove $removename
+                ;;
+
+            0)
+                solin
+                ;;
+
+            *)
+                echo "无效的输入!"
+                ;;
+        esac
+        break_end
+    done
+
+}
+
+# 定义安装更新 Docker 的函数
+update_docker() {
+    if [ -f "/etc/alpine-release" ]; then
+        apk update
+        apk add docker docker-compose
+        rc-update add docker default
+        service docker start
+    else
         curl -fsSL https://get.docker.com | sh && ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin
         systemctl start docker
         systemctl enable docker
+    fi
+}
+
+# 定义安装 Docker 的函数
+install_docker() {
+    if ! command -v docker &>/dev/null; then
+        update_docker
     else
         echo "Docker 已经安装"
     fi
@@ -704,6 +929,9 @@ uninstall_docker() {
             elif [ -f "/etc/redhat-release" ]; then
                 yum remove -y docker docker-client docker-client-latest docker-common docker-latest \
                 docker-latest-logrotate docker-logrotate docker-engine
+            elif [ -f "/etc/alpine-release" ]; then
+                # 对于Alpine Linux，使用apk来卸载Docker
+                sudo apk del docker docker-compose
             fi
             # 删除Docker的数据和配置文件
             sudo rm -rf /var/lib/docker
@@ -743,7 +971,7 @@ docker_manage() {
         case $sub_choice in
             1)
                 clear
-                install_docker
+                update_docker
                 ;;
             2)
                 clear
@@ -782,6 +1010,207 @@ docker_manage() {
         esac
         break_end
     done 
+}
+
+# 测试脚本
+test_script() {
+    while true; do
+        clear
+        echo "▶ 测试脚本合集"
+        echo "------------------------"
+        echo "1. ChatGPT解锁状态检测"
+        echo "2. Region流媒体解锁测试"
+        echo "3. yeahwu流媒体解锁检测"
+        echo "4. besttrace三网回程延迟路由测试"
+        echo "5. mtr_trace三网回程线路测试"
+        echo "6. Superspeed三网测速"
+        echo "7. yabs性能带宽测试"
+        echo "8. bench性能测试"
+        echo "------------------------"
+        echo -e "9. spiritysdx融合怪测评 \033[33mNEW\033[0m"
+        echo "------------------------"
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            1)
+                clear
+                bash <(curl -Ls https://cdn.jsdelivr.net/gh/missuo/OpenAI-Checker/openai.sh)
+                ;;
+            2)
+                clear
+                bash <(curl -L -s check.unlock.media)
+                ;;
+            3)
+                clear
+                install wget
+                wget -qO- https://github.com/yeahwu/check/raw/main/check.sh | bash
+                ;;
+            4)
+                clear
+                install wget
+                wget -qO- git.io/besttrace | bash
+                ;;
+            5)
+                clear
+                curl https://raw.githubusercontent.com/zhucaidan/mtr_trace/main/mtr_trace.sh | bash
+                ;;
+            6)
+                clear
+                bash <(curl -Lso- https://git.io/superspeed_uxh)
+                ;;
+            7)
+                clear
+                curl -sL yabs.sh | bash -s -- -i -5
+                ;;
+            8)
+                clear
+                curl -Lso- bench.sh | bash
+                ;;
+            9)
+                clear
+                curl -L https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh -o ecs.sh && chmod +x ecs.sh && bash ecs.sh
+                ;;
+            0)
+                solin
+                ;;
+            *)
+                echo "无效的输入!"
+                ;;
+        esac
+        break_end
+    done   
+
+}
+
+# 设置root密码
+set_rootpasswd() {
+
+    echo "设置你的ROOT密码"
+    passwd
+    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config;
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config;
+    service sshd restart
+    echo "ROOT登录设置完毕！"
+    read -p "需要重启服务器吗？(Y/N): " choice
+    case "$choice" in
+        [Yy])
+            reboot
+            ;;
+        [Nn])
+            echo "已取消"
+            ;;
+        0)
+            solin
+            ;;
+        *)
+            echo "无效的选择，请输入 Y 或 N。"
+            ;;
+    esac
+}
+
+# DD系统1
+dd_xitong_1() {    
+    read -p "请输入你重装后的密码: " vpspasswd
+    echo "任意键继续，重装后初始用户名: root  初始密码: $vpspasswd  初始端口: 22"
+    read -n 1 -s -r -p ""
+    install wget
+    bash <(wget --no-check-certificate -qO- 'https://raw.githubusercontent.com/MoeClub/Note/master/InstallNET.sh') $xitong -v 64 -p $vpspasswd -port 22
+}
+
+# 甲骨文脚本
+oracle_script() {
+    while true; do
+        clear
+        echo "▶ 甲骨文云脚本合集"
+        echo "------------------------"
+        echo "1. 安装闲置机器活跃脚本"
+        echo "2. 卸载闲置机器活跃脚本"
+        echo "------------------------"
+        echo "3. DD重装系统脚本"
+        echo "4. R探长开机脚本"
+        echo "------------------------"
+        echo "5. 开启ROOT密码登录模式"
+        echo "------------------------"
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            1)
+                clear
+                echo "活跃脚本: CPU占用10-20% 内存占用15% "
+                read -p "确定安装吗？(Y/N): " choice
+                case "$choice" in
+                    [Yy])
+                        install_docker
+                        docker run -itd --name=lookbusy --restart=always \
+                                -e TZ=Asia/Shanghai \
+                                -e CPU_UTIL=10-20 \
+                                -e CPU_CORE=1 \
+                                -e MEM_UTIL=15 \
+                                -e SPEEDTEST_INTERVAL=120 \
+                                fogforest/lookbusy
+                        ;;
+                    [Nn])
+                        ;;
+                    *)
+                        echo "无效的选择，请输入 Y 或 N。"
+                        ;;
+                esac
+                ;;
+            2)
+                clear
+                docker rm -f lookbusy
+                docker rmi fogforest/lookbusy
+                ;;
+            3)
+                clear
+                echo "请备份数据，将为你重装系统，预计花费15分钟。"
+                read -p "确定继续吗？(Y/N): " choice
+
+                case "$choice" in
+                    [Yy])
+                        while true; do
+                            read -p "请选择要重装的系统:  1. Debian12 | 2. Ubuntu20.04 : " sys_choice
+
+                            case "$sys_choice" in
+                                1)
+                                    xitong="-d 12"
+                                    break  # 结束循环
+                                    ;;
+                                2)
+                                    xitong="-u 20.04"
+                                    break  # 结束循环
+                                    ;;
+                                *)
+                                    echo "无效的选择，请重新输入。"
+                                    ;;
+                            esac
+                        done
+                        
+                        dd_xitong_1
+                        ;;
+                    [Nn])
+                        echo "已取消"
+                        ;;
+                    *)
+                        echo "无效的选择，请输入 Y 或 N。"
+                        ;;
+                esac
+                ;;
+
+            4)
+                clear
+                echo "该功能处于开发阶段，敬请期待！"
+                ;;
+            5)
+                clear
+                set_rootpasswd
+        esac
+        break_end
+    done
 }
 
 # 定义检测端口
@@ -877,7 +1306,7 @@ install_php() {
     
     # 定义要执行的命令
     commands=(
-        
+
         "docker exec php apt update > /dev/null 2>&1"
         "docker exec php apk update > /dev/null 2>&1"
         "docker exec php74 apt update > /dev/null 2>&1"
@@ -902,7 +1331,8 @@ install_php() {
         "docker exec php install-php-extensions imagick redis > /dev/null 2>&1"
 
         # php配置参数
-        "docker exec php sh -c 'echo \"upload_max_filesize=50M \\n post_max_size=50M\" > /usr/local/etc/php/conf.d/uploads.ini' > /dev/null 2>&1"
+        "docker exec php sh -c 'echo \"upload_max_filesize=50M \" > /usr/local/etc/php/conf.d/uploads.ini' > /dev/null 2>&1"
+        "docker exec php sh -c 'echo \"post_max_size=50M \" > /usr/local/etc/php/conf.d/post.ini' > /dev/null 2>&1"
         "docker exec php sh -c 'echo \"memory_limit=256M\" > /usr/local/etc/php/conf.d/memory.ini' > /dev/null 2>&1"
         "docker exec php sh -c 'echo \"max_execution_time=1200\" > /usr/local/etc/php/conf.d/max_execution_time.ini' > /dev/null 2>&1"
         "docker exec php sh -c 'echo \"max_input_time=600\" > /usr/local/etc/php/conf.d/max_input_time.ini' > /dev/null 2>&1"
@@ -921,7 +1351,8 @@ install_php() {
         "docker exec php74 install-php-extensions imagick redis > /dev/null 2>&1"
 
         # php7.4配置参数
-        "docker exec php74 sh -c 'echo \"upload_max_filesize=50M \\n post_max_size=50M\" > /usr/local/etc/php/conf.d/uploads.ini' > /dev/null 2>&1"
+        "docker exec php74 sh -c 'echo \"upload_max_filesize=50M \" > /usr/local/etc/php/conf.d/uploads.ini' > /dev/null 2>&1"
+        "docker exec php74 sh -c 'echo \"post_max_size=50M \" > /usr/local/etc/php/conf.d/post.ini' > /dev/null 2>&1"
         "docker exec php74 sh -c 'echo \"memory_limit=256M\" > /usr/local/etc/php/conf.d/memory.ini' > /dev/null 2>&1"
         "docker exec php74 sh -c 'echo \"max_execution_time=1200\" > /usr/local/etc/php/conf.d/max_execution_time.ini' > /dev/null 2>&1"
         "docker exec php74 sh -c 'echo \"max_input_time=600\" > /usr/local/etc/php/conf.d/max_input_time.ini' > /dev/null 2>&1"
@@ -1202,6 +1633,209 @@ dujiaoka_display() {
     echo "sed -i 's/ADMIN_HTTPS=false/ADMIN_HTTPS=true/g' /home/docker/web/html/$yuming/dujiaoka/.env"
 }
 
+# 添加discuz 配置
+discuz_config() {
+
+    wget -O /home/docker/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/discuz/discuz.com.conf
+
+    sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
+
+    cd /home/docker/web/html
+    mkdir $yuming
+    cd $yuming
+    wget https://github.com/zxl2008gz/docker/raw/main/discuz/Discuz_X3.5_SC_UTF8_20230520.zip
+    unzip -o Discuz_X3.5_SC_UTF8_20230520.zip
+    rm Discuz_X3.5_SC_UTF8_20230520.zip
+}
+
+# discuz 显示
+discuz_display() {
+    clear
+    echo "您的Discuz论坛搭建好了！"
+    echo "https://$yuming"
+    echo "------------------------"
+    echo "安装信息如下: "
+    echo "数据库地址: mysql"
+    echo "数据库名: $dbname"
+    echo "用户名: $dbuse"
+    echo "密码: $dbusepasswd"
+    echo "表前缀: discuz_"
+}
+
+# 添加cms 配置
+cms_config() {
+
+    wget -O /home/docker/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/CMS/maccms.com.conf
+
+    sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
+
+    cd /home/docker/web/html
+    mkdir $yuming
+    cd $yuming
+
+    wget https://github.com/magicblack/maccms_down/raw/master/maccms10.zip && unzip maccms10.zip && rm maccms10.zip
+    cd /home/docker/web/html/$yuming/template/ && wget https://github.com/zxl2008gz/docker/raw/main/CMS/DYXS2.zip && unzip DYXS2.zip && rm /home/docker/web/html/$yuming/template/DYXS2.zip
+    cp /home/docker/web/html/$yuming/template/DYXS2/asset/admin/Dyxs2.php /home/docker/web/html/$yuming/application/admin/controller
+    cp /home/docker/web/html/$yuming/template/DYXS2/asset/admin/dycms.html /home/docker/web/html/$yuming/application/admin/view/system
+    mv /home/docker/web/html/$yuming/admin.php /home/docker/web/html/$yuming/vip.php && wget -O /home/docker/web/html/$yuming/application/extra/maccms.php https://raw.githubusercontent.com/zxl2008gz/docker/main/CMS/maccms.php
+
+}
+
+# cms 显示
+cms_display() {
+    clear
+    echo "您的苹果CMS搭建好了！"
+    echo "https://$yuming"
+    echo "------------------------"
+    echo "安装信息如下: "
+    echo "数据库地址: mysql"
+    echo "数据库端口: 3306"
+    echo "数据库名: $dbname"
+    echo "用户名: $dbuse"
+    echo "密码: $dbusepasswd"
+    echo "数据库前缀: mac_"
+    echo "------------------------"
+    echo "安装成功后登录后台地址"
+    echo "https://$yuming/vip.php"
+}
+
+# 添加flarum 配置
+flarum_config() {
+
+    wget -O /home/docker/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/flarum/flarum.com.conf
+
+    sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
+
+    cd /home/docker/web/html
+    mkdir $yuming
+    cd $yuming
+
+    docker exec php sh -c "php -r \"copy('https://getcomposer.org/installer', 'composer-setup.php');\""
+    docker exec php sh -c "php composer-setup.php"
+    docker exec php sh -c "php -r \"unlink('composer-setup.php');\""
+    docker exec php sh -c "mv composer.phar /usr/local/bin/composer"
+
+    docker exec php composer create-project flarum/flarum /var/www/html/$yuming
+    docker exec php sh -c "cd /var/www/html/$yuming && composer require flarum-lang/chinese-simplified"
+    docker exec php sh -c "cd /var/www/html/$yuming && composer require fof/polls"
+}
+
+# flarum 显示
+flarum_display() {
+    clear
+    echo "您的flarum论坛网站搭建好了！"
+    echo "https://$yuming"
+    echo "------------------------"
+    echo "安装信息如下: "
+    echo "数据库地址: mysql"
+    echo "数据库名: $dbname"
+    echo "用户名: $dbuse"
+    echo "密码: $dbusepasswd"
+    echo "表前缀: flarum_"
+    echo "管理员信息自行设置"
+}
+
+# cloudreve 配置
+cloudreve_config() {
+    cd /home/ && mkdir -p docker/cloud && cd docker/cloud && mkdir temp_data && mkdir -vp cloudreve/{uploads,avatar} && touch cloudreve/conf.ini && touch cloudreve/cloudreve.db && mkdir -p aria2/config && mkdir -p data/aria2 && chmod -R 777 data/aria2
+    curl -o /home/docker/cloud/docker-compose.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/cloudreve/cloudreve-docker-compose.yml
+    timeout=20
+    docker_name="cloudreve"
+    read -t $timeout -p "外部端口（默认输入：5212）" project_port
+    docker_port=${project_port:-5212}
+    [ -z "$project_port" ] && echo "" 
+    sed -i "s/5212:5212/$docker_port:5212/g" /home/docker/cloud/docker-compose.yml
+    cd /home/docker/cloud/ && docker-compose up -d
+}
+
+# 获取cloudreve 端口
+get_cloudreve_port() {
+    cloudreve_path="/home/docker/cloud/docker-compose.yml"
+    port_number=$(grep -A 5 "cloudreve:" "$cloudreve_path" | grep "ports:" -A 1 | tail -n1 | awk -F ':' '{print $1}' | tr -d '[:space:]"-')
+}
+
+install_cloudreve() {
+    
+    mysql_redis_php_path="$1"
+
+    if docker inspect cloudreve &>/dev/null; then
+        clear
+        echo "cloudreve已安装，访问地址: "
+        ip_address
+        get_cloudreve_port
+        echo "http:$ipv4_address:$port_number"
+        echo ""
+
+        echo "应用操作"
+        echo "------------------------"
+        echo "1. 更新应用             2. 卸载应用"
+        echo "------------------------"
+        echo "0. 返回上一级选单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            1)
+                clear
+                docker rm -f cloudreve
+                docker rmi -f cloudreve/cloudreve:latest
+                docker rm -f aria2
+                docker rmi -f p3terx/aria2-pro
+
+                cloudreve_config
+
+                check_path_and_output $mysql_redis_php_path
+
+                sleep 3
+                docker logs cloudreve
+                echo ""
+                ;;
+            2)
+                clear
+                docker rm -f cloudreve
+                docker rmi -f cloudreve/cloudreve:latest
+                docker rm -f aria2
+                docker rmi -f p3terx/aria2-pro
+                rm -rf /home/docker/cloud
+                echo "应用已卸载"
+                ;;
+            0)
+                break  # 跳出循环，退出菜单
+                ;;
+            *)
+                break  # 跳出循环，退出菜单
+                ;;
+        esac
+    else
+        clear
+        echo "安装提示"
+        echo "cloudreve是一个支持多家云存储的网盘系统"
+        echo "官网介绍: https://cloudreve.org/"
+        echo ""
+
+        # 提示用户确认安装
+        read -p "确定安装cloudreve吗？(Y/N): " choice
+        case "$choice" in
+            [Yy])
+                clear
+                install_docker
+                cloudreve_config
+
+                check_path_and_output $mysql_redis_php_path
+
+                sleep 3
+                docker logs cloudreve
+                echo ""
+
+                ;;
+            [Nn])
+                ;;
+            *)
+                ;;
+        esac
+    fi    
+}
+
 # 仅安装nginx
 install_nginx() {
     # 创建必要的目录和文件
@@ -1347,13 +1981,15 @@ site_manage() {
             2)
                 read -p "请输入旧域名: " oldyuming
                 read -p "请输入新域名: " yuming
+                install_ssltls
                 mv /home/docker/web/conf.d/$oldyuming.conf /home/docker/web/conf.d/$yuming.conf
                 sed -i "s/$oldyuming/$yuming/g" /home/docker/web/conf.d/$yuming.conf
                 mv /home/docker/web/html/$oldyuming /home/docker/web/html/$yuming
 
                 rm /home/docker/web/certs/${oldyuming}_key.pem
-                rm /home/dcoker/web/certs/${oldyuming}_cert.pem
-                install_ssltls
+                rm /home/dcoker/web/certs/${oldyuming}_cert.pem     
+
+                docker restart nginx           
                 ;;
             3)
                 docker exec -it nginx rm -rf /var/cache/nginx
@@ -1403,7 +2039,7 @@ backup_site_data() {
                 if [ -n "$latest_tar" ]; then
                     ssh-keygen -f "/root/.ssh/known_hosts" -R "$remote_ip"
                     sleep 2  # 添加等待时间
-                    scp -o StrictHostKeyChecking=no "$latest_tar" "root@$remote_ip:/home/docker/"
+                    scp -o StrictHostKeyChecking=no "$latest_tar" "root@$remote_ip:/home"
                     echo "文件已传送至远程服务器home/docker目录。"
                 else
                     echo "未找到要传送的文件。"
@@ -1680,26 +2316,34 @@ install_ldnmp() {
         echo "3. 安装可道云桌面"
         echo "4. 安装onlyoffice可道云版本"
         echo "5. 安装独角数发卡网"
+        echo "6. 安装Discuz论坛"
+        echo "7. 安装苹果CMS网站"
+        echo "8. 安装flarum论坛网站"
         echo "------------------------"	
         echo "21. 安装epusdt收款地址          22. 安装LobeChat聊天网站" 
         echo "23. 安装GeminiPro聊天网站       24. 安装vaultwarden密码管理平台" 
         echo "25. onlyoffice在线办公OFFICE    26. Nextcloud网盘"
         echo "27. Speedtest测速服务面板       28. portainer容器管理面板"
-        echo "29. Poste.io邮件服务器程序"
+        echo "29. Poste.io邮件服务器程序      30. 安装Halo博客网站"
+        echo "31. QB离线BT磁力下载面板        32. VScode网页版"
+        echo "33. UptimeKuma监控工具          34. Cloudreve网盘"
+        echo "35. LibreSpeed测速工具          36. searxng聚合搜索站"
+        echo "37. PhotoPrism私有相册系统      38. StirlingPDF工具大全"
+        echo "39. drawio免费的在线图表软件"
         echo "------------------------"				
-        echo "41. 仅安装nginx"	
-        echo "42. 站点重定向"
-        echo "43. 站点反向代理"
-        echo "44. 自定义静态站点"				
+        echo "61. 仅安装nginx"	
+        echo "62. 站点重定向"
+        echo "63. 站点反向代理"
+        echo "64. 自定义静态站点"				
         echo "------------------------"	
-        echo "51. 站点数据管理                52. 备份全站数据"		
-        echo "53. 定时远程备份                54. 还原全站数据"					
+        echo "71. 站点数据管理                72. 备份全站数据"		
+        echo "73. 定时远程备份                74. 还原全站数据"					
         echo "------------------------"
-        echo "55. 站点防御程序"		
+        echo "75. 站点防御程序"		
         echo "------------------------"
-        echo "56. 优化LDNMP环境"					
-        echo "57. 更新LDNMP环境"					
-        echo "58. 卸载LDNMP环境"					
+        echo "76. 优化LDNMP环境"					
+        echo "77. 更新LDNMP环境"					
+        echo "78. 卸载LDNMP环境"					
         echo "------------------------"				
         echo "0. 返回主菜单"
         echo "------------------------"
@@ -1762,7 +2406,37 @@ install_ldnmp() {
                 restart_ldnmp				
                 dujiaoka_display
                 nginx_status
-                ;;            
+                ;;  
+            6)
+                clear
+                add_yuming
+                install_ssltls
+                add_db "$yuming" "/home/docker/web/docker-compose.yml"
+                discuz_config
+                restart_ldnmp				
+                discuz_display
+                nginx_status
+                ;;  
+            7)
+                clear
+                add_yuming
+                install_ssltls
+                add_db "$yuming" "/home/docker/web/docker-compose.yml"
+                cms_config
+                restart_ldnmp				
+                cms_display
+                nginx_status
+                ;;  
+            8)
+                clear
+                add_yuming
+                install_ssltls
+                add_db "$yuming" "/home/docker/web/docker-compose.yml"
+                flarum_config
+                restart_ldnmp				
+                flarum_display
+                nginx_status
+                ;;
             21)
                 clear
                 add_yuming
@@ -1831,14 +2505,94 @@ install_ldnmp() {
             29)
                 install_Poste
                 ;;
-            41)
+            30)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming
+                install_halo "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                ;; 
+            31)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming
+                install_qbittorrent "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                ;;  
+            32)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming
+                install_vscode_web "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                ;;
+            33)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming
+                install_UptimeKuma "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                ;;
+            34)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming                
+                install_cloudreve "/home/docker/web/docker-compose.yml"
+                ;;  
+            35)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming 
+                install_librespeed "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                              
+                ;;
+            36)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming
+                install_searxng "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                
+                ;;
+            37)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming
+                install_photoprism "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                
+                ;; 
+            38)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming
+                install_s_pdf "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                
+                ;;
+            39)
+                clear
+                add_yuming
+                install_ssltls
+                cd /home/docker/web/html
+                mkdir -p /home/docker/web/html/$yuming
+                install_drawio "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                
+                ;;                             
+            61)
                 check_port
                 install_dependency
                 install_docker
                 install_certbot
                 install_nginx
                 ;;  
-            42)
+            62)
                 clear
                 ip_address
                 add_yuming
@@ -1847,7 +2601,7 @@ install_ldnmp() {
                 redirect_config
                 nginx_status
                 ;;
-            43)
+            63)
                 clear
                 ip_address
                 add_yuming
@@ -1857,27 +2611,27 @@ install_ldnmp() {
                 reverseproxy_config
                 nginx_status
                 ;;
-            44)
+            64)
                 clear
                 add_yuming
                 install_ssltls
                 custom_static
                 nginx_status
                 ;;
-            51)
+            71)
                 site_manage
                 ;;
-            52)
+            72)
                 cd /home/docker && tar czvf web_$(date +"%Y%m%d%H%M%S").tar.gz web
                 backup_site_data
                 ;;
-            53)
+            73)
                 scheduled_remote_backup
                 ;;
-            54)
+            74)
                 # 还原全站数据
                 clear
-                cd /home/docker && ls -t /home/docker/*.tar.gz | head -1 | xargs -I {} tar -xzf {}
+                cd /home/docker && ls -t /home/*.tar.gz | head -1 | xargs -I {} tar -xzf {}
                 check_port
                 install_dependency
                 install_docker
@@ -1892,13 +2646,13 @@ install_ldnmp() {
                 echo "------------------------"
                 ldnmp_info
                 ;;
-            55)
+            75)
                 site_defense_program
                 ;;
-            56)
+            76)
                 optimize_ldnmp
                 ;;
-            57)
+            77)
                 clear
                 docker rm -f nginx php php74 mysql redis
                 docker rmi nginx php:fpm php:7.4.33-fpm mysql redis
@@ -1917,7 +2671,7 @@ install_ldnmp() {
                 echo "------------------------"
                 ldnmp_info
                 ;;
-            58)
+            78)
                 clear
                 read -p "强烈建议先备份全部网站数据，再卸载LDNMP环境。确定删除所有网站数据吗？(Y/N): " choice
                 case "$choice" in
@@ -1954,12 +2708,18 @@ check_path_and_output() {
         reverse_proxy
         # 获取外部 IP 地址
         ip_address
+        clear
+        echo "$docker_name 已经安装完成"
+        echo "------------------------"     
         echo "您可以使用以下地址访问:"
         echo "https://$yuming"
         $docker_use
         $docker_passwd1
     else
         ip_address
+        clear
+        echo "$docker_name 已经安装完成"
+        echo "------------------------"    
         echo "您可以使用以下地址访问:"
         echo "http:$ipv4_address:$docker_port"
         $docker_use
@@ -1969,74 +2729,68 @@ check_path_and_output() {
 
 # 安装应用
 docker_app() {
-if docker inspect "$docker_name" &>/dev/null; then
-    clear
-    echo "$docker_name 已安装，访问地址: "
-    ip_address
-    echo "http:$ipv4_address:$docker_port"
-    echo ""
-    echo "应用操作"
-    echo "------------------------"
-    echo "1. 更新应用             2. 卸载应用"
-    echo "------------------------"
-    echo "0. 返回上一级选单"
-    echo "------------------------"
-    read -p "请输入你的选择: " sub_choice
+    if docker inspect "$docker_name" &>/dev/null; then
+        clear
+        echo "$docker_name 已安装，访问地址: "
+        ip_address
+        echo "http:$ipv4_address:$docker_port"
+        echo ""
+        echo "应用操作"
+        echo "------------------------"
+        echo "1. 更新应用             2. 卸载应用"
+        echo "------------------------"
+        echo "0. 返回上一级选单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
 
-    case $sub_choice in
-        1)
-            clear
-            docker rm -f "$docker_name"
-            docker rmi -f "$docker_img"
+        case $sub_choice in
+            1)
+                clear
+                docker rm -f "$docker_name"
+                docker rmi -f "$docker_img"
 
-            $docker_run
-            clear
-            echo "$docker_name 已经安装完成"
-            echo "------------------------"
-            check_path_and_output $mysql_redis_php_path            
-            ;;
-        2)
-            clear
-            docker rm -f "$docker_name"
-            docker rmi -f "$docker_img"
-            rm -rf "/home/docker/$docker_name"
-            echo "应用已卸载"
-            ;;
-        0)
-            # 跳出循环，退出菜单
-            ;;
-        *)
-            # 跳出循环，退出菜单
-            ;;
-    esac
-else
-    clear
-    echo "安装提示"
-    echo "$docker_describe"
-    echo "$docker_url"
-    echo ""
+                $docker_run
+                check_path_and_output $mysql_redis_php_path                                       
+                ;;
+            2)
+                clear
+                docker rm -f "$docker_name"
+                docker rmi -f "$docker_img"
+                rm -rf "/home/docker/$docker_name"
+                echo "应用已卸载"
+                ;;
+            0)
+                # 跳出循环，退出菜单
+                ;;
+            *)
+                # 跳出循环，退出菜单
+                ;;
+        esac
+    else
+        clear
+        echo "安装提示"
+        echo "$docker_describe"
+        echo "$docker_url"
+        echo ""
 
-    # 提示用户确认安装
-    read -p "确定安装吗？(Y/N): " choice
-    case "$choice" in
-        [Yy])
-            clear
-            # 安装 Docker（请确保有 install_docker 函数）
-            install_docker
-            $docker_run
-            clear
-            echo "$docker_name 已经安装完成"
-            echo "------------------------"
-            check_path_and_output $mysql_redis_php_path
-            ;;
-        [Nn])
-            # 用户选择不安装
-            ;;
-        *)
-            # 无效输入
-            ;;
-    esac
-fi
+        # 提示用户确认安装
+        read -p "确定安装吗？(Y/N): " choice
+        case "$choice" in
+            [Yy])
+                clear
+                # 安装 Docker（请确保有 install_docker 函数）
+                install_docker
+                $docker_run
+                check_path_and_output $mysql_redis_php_path
+                ;;
+            [Nn])
+                # 用户选择不安装
+                ;;
+            *)
+                # 无效输入
+                ;;
+        esac
+    fi
 
 }
 
@@ -2627,6 +3381,287 @@ else
 fi
 }
 
+# 安装halo网站
+install_halo() {
+
+    halo_path="$1"
+    mysql_redis_php_path="$2"
+    # 设置超时时间（秒）
+    timeout=20 
+    read -t $timeout -p "项目名称（默认输入：halo）" project_name
+    docker_name=${project_name:-halo}
+    # 如果没有输入，打印换行符
+    [ -z "$project_name" ] && echo "" 
+    read -t $timeout -p "外部端口（默认输入：8010）" project_port
+    docker_port=${project_port:-8010}
+    [ -z "$project_port" ] && echo ""
+    set_network_name "$mysql_redis_php_path"
+    docker_img="halohub/halo:2.11"
+    docker_run="docker run -d \
+                    --name=$docker_name \
+                    --restart=always \
+                    --network $network_name \
+                    -p $docker_port:8090 \
+                    -v $halo_path/$docker_name/.halo2:/root/.halo2 \
+                    $docker_img"
+    docker_describe="Halo 是一个用 Java 编写的现代化博客系统（博客引擎），它配备了一个简洁且功能丰富的界面，旨在为用户提供轻松的博客搭建和管理体验。Halo 的设计哲学是提供一个简单、优雅且高度可定制的平台，使得个人博客的搭建变得快速和简单。"
+    docker_url="官网介绍: https://halo.run/"
+    docker_use=""
+    docker_passwd=""
+    docker_passwd1=""
+    docker_app       
+}
+
+# QB离线BT磁力下载面板
+install_qbittorrent() {
+
+    qbittorrent_paht="$1"
+    mysql_redis_php_path="$2"
+    # 设置超时时间（秒）
+    timeout=20 
+    read -t $timeout -p "项目名称（默认输入：qbittorrent）" project_name
+    docker_name=${project_name:-qbittorrent}
+    # 如果没有输入，打印换行符
+    [ -z "$project_name" ] && echo "" 
+    read -t $timeout -p "外部端口（默认输入：8081）" project_port
+    docker_port=${project_port:-8081}
+    [ -z "$project_port" ] && echo ""
+    docker_img="lscr.io/linuxserver/qbittorrent:latest"
+    docker_run="docker run -d \
+                    --name=$docker_name \
+                    --restart unless-stopped \
+                    -e PUID=1000 \
+                    -e PGID=1000 \
+                    -e TZ=Etc/UTC \
+                    -e WEBUI_PORT=$docker_port \
+                    -p $docker_port:8081 \
+                    -p 6881:6881 \
+                    -p 6881:6881/udp \
+                    -v $halo_path/$docker_name/config:/config \
+                    -v $halo_path/$docker_name/downloads:/downloads \
+                    $docker_img"
+    docker_describe="qbittorrent离线BT磁力下载服务"
+    docker_url="官网介绍: https://hub.docker.com/r/linuxserver/qbittorrent"
+    docker_use="sleep 3"
+    docker_passwd="docker logs qbittorrent"
+    docker_passwd1=""
+    docker_app     
+}
+
+# vscode网页版
+install_vscode_web() {
+    vscode_web_path="$1"
+    mysql_redis_php_path="$2"
+    # 设置超时时间（秒）
+    timeout=20 
+    read -t $timeout -p "项目名称（默认输入：vscode_web）" project_name
+    docker_name=${project_name:-vscode_web}
+    # 如果没有输入，打印换行符
+    [ -z "$project_name" ] && echo "" 
+    read -t $timeout -p "外部端口（默认输入：8180）" project_port
+    docker_port=${project_port:-8180}
+    [ -z "$project_port" ] && echo ""
+    docker_img="codercom/code-server"
+    docker_run="docker run -d \
+                    --name=$docker_name \
+                    --restart always \
+                    -p $docker_port:8080 \
+                    -v $vscode_web_path/$docker_name/vscodeweb:/home/coder/.local/share/code-server \
+                    $docker_img"
+    docker_describe="VScode是一款强大的在线代码编写工具"
+    docker_url="官网介绍: https://github.com/coder/code-server"
+    docker_use="sleep 3"
+    docker_passwd="docker exec vscode_web cat /home/coder/.config/code-server/config.yaml"
+    docker_passwd1=""
+    docker_app   
+}
+
+# UptimeKuma监控工具
+install_UptimeKuma() {
+    UptimeKuma_path="$1"
+    mysql_redis_php_path="$2"
+    # 设置超时时间（秒）
+    timeout=20 
+    read -t $timeout -p "项目名称（默认输入：uptimeKuma）" project_name
+    docker_name=${project_name:-uptimeKuma}
+    # 如果没有输入，打印换行符
+    [ -z "$project_name" ] && echo "" 
+    read -t $timeout -p "外部端口（默认输入：3003）" project_port
+    docker_port=${project_port:-3003}
+    [ -z "$project_port" ] && echo ""
+    docker_img="louislam/uptime-kuma:latest"
+    docker_run="docker run -d \
+                    --name=$docker_name \
+                    --restart always \
+                    -p $docker_port:3001 \
+                    -v $UptimeKuma_path/$docker_name/uptime-kuma-data:/app/data \
+                    $docker_img"
+    docker_describe="Uptime Kuma 易于使用的自托管监控工具"
+    docker_url="官网介绍: https://github.com/louislam/uptime-kuma"
+    docker_use=""
+    docker_passwd=""
+    docker_passwd1=""
+    docker_app   
+}
+
+# librespeed测速工具
+install_librespeed() {
+
+    librespeed_path="$1"
+    mysql_redis_php_path="$2"
+    # 设置超时时间（秒）
+    timeout=20 
+    read -t $timeout -p "项目名称（默认输入：librespeed）" project_name
+    docker_name=${project_name:-librespeed}
+    # 如果没有输入，打印换行符
+    [ -z "$project_name" ] && echo "" 
+    read -t $timeout -p "外部端口（默认输入：6681）" project_port
+    docker_port=${project_port:-6681}
+    [ -z "$project_port" ] && echo ""
+    docker_img="ghcr.io/librespeed/speedtest:latest"
+    docker_run="docker run -d \
+                    --name=$docker_name \
+                    --restart always \
+                    -e MODE=standalone \
+                    -p $docker_port:80 \
+                    $docker_img"
+    docker_describe="librespeed是用Javascript实现的轻量级速度测试工具，即开即用"
+    docker_url="官网介绍: https://github.com/librespeed/speedtest"
+    docker_use=""
+    docker_passwd=""
+    docker_passwd1=""
+    docker_app      
+}
+
+# searxng聚合搜索站
+install_searxng() {
+
+    searxng_path="$1"
+    mysql_redis_php_path="$2"
+    # 设置超时时间（秒）
+    timeout=20 
+    read -t $timeout -p "项目名称（默认输入：searxng）" project_name
+    docker_name=${project_name:-searxng}
+    # 如果没有输入，打印换行符
+    [ -z "$project_name" ] && echo "" 
+    read -t $timeout -p "外部端口（默认输入：8700）" project_port
+    docker_port=${project_port:-8700}
+    [ -z "$project_port" ] && echo ""
+    docker_img="alandoyle/searxng:latest"
+    docker_run="docker run -d \
+                    --name=$docker_name \
+                    --restart=unless-stopped \
+                    --init \
+                    -p $docker_port:8080 \
+                    -v $searxng_path/$docker_name/config:/etc/searxng \
+                    -v $searxng_path/$docker_name/templates:/usr/local/searxng/searx/templates/simple \
+                    -v $searxng_path/$docker_name/theme:/usr/local/searxng/searx/static/themes/simple \
+                    $docker_img"
+    docker_describe="searxng是一个私有且隐私的搜索引擎站点"
+    docker_url="官网介绍: https://hub.docker.com/r/alandoyle/searxng"
+    docker_use=""
+    docker_passwd=""
+    docker_passwd1=""
+    docker_app      
+}
+
+# photoprism私人相册
+install_photoprism() {
+
+    photoprism_path="$1"
+    mysql_redis_php_path="$2"
+    # 设置超时时间（秒）
+    timeout=20 
+    read -t $timeout -p "项目名称（默认输入：photoprism）" project_name
+    docker_name=${project_name:-photoprism}
+    # 如果没有输入，打印换行符
+    [ -z "$project_name" ] && echo "" 
+    read -t $timeout -p "外部端口（默认输入：2342）" project_port
+    docker_port=${project_port:-2342}
+    [ -z "$project_port" ] && echo ""
+    docker_img="photoprism/photoprism:latest"
+    rootpasswd=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c16)
+    docker_run="docker run -d \
+                    --name=$docker_name \
+                    --restart=always \
+                    -p $docker_port:2342 \
+                    --security-opt seccomp=unconfined \
+                    --security-opt apparmor=unconfined \
+                    -e PHOTOPRISM_UPLOAD_NSFW="true" \
+                    -e PHOTOPRISM_ADMIN_PASSWORD="$rootpasswd" \
+                    -v $searxng_path/$docker_name/storage:/photoprism/storage \
+                    -v $searxng_path/$docker_name/Pictures:/photoprism/originals \
+                    $docker_img"
+    docker_describe="photoprism非常强大的私有相册系统"
+    docker_url="官网介绍: https://www.photoprism.app/"
+    docker_use="echo \"账号: admin  密码: $rootpasswd\""
+    docker_passwd=""
+    docker_passwd1=""
+    docker_app        
+} 
+
+# StirlingPDF工具大全
+install_s_pdf() {
+
+    s_pdf_path="$1"
+    mysql_redis_php_path="$2"
+    # 设置超时时间（秒）
+    timeout=20 
+    read -t $timeout -p "项目名称（默认输入：s_pdf）" project_name
+    docker_name=${project_name:-s_pdf}
+    # 如果没有输入，打印换行符
+    [ -z "$project_name" ] && echo "" 
+    read -t $timeout -p "外部端口（默认输入：8020）" project_port
+    docker_port=${project_port:-8020}
+    [ -z "$project_port" ] && echo ""
+    docker_img="frooodle/s-pdf:latest"
+    docker_run="docker run -d \
+                    --name=$docker_name \
+                    --restart=always \
+                    -p $docker_port:8080 \
+                    -v $searxng_path/$docker_name/trainingData:/usr/share/tesseract-ocr/5/tessdata \
+                    -v $searxng_path/$docker_name/extraConfigs:/configs \
+                    -v $searxng_path/$docker_name/logs:/logs \
+                    -e DOCKER_ENABLE_SECURITY=false \
+                    $docker_img"
+    docker_describe="这是一个强大的本地托管基于 Web 的 PDF 操作工具，使用 docker，允许您对 PDF 文件执行各种操作，例如拆分合并、转换、重新组织、添加图像、旋转、压缩等。"
+    docker_url="官网介绍: https://github.com/Stirling-Tools/Stirling-PDF"
+    docker_use=""
+    docker_passwd=""
+    docker_passwd1=""
+    docker_app   
+}
+
+# drawio免费的在线图表软件
+install_drawio() {
+
+    drawio_path="$1"
+    mysql_redis_php_path="$2"
+    # 设置超时时间（秒）
+    timeout=20 
+    read -t $timeout -p "项目名称（默认输入：drawio）" project_name
+    docker_name=${project_name:-drawio}
+    # 如果没有输入，打印换行符
+    [ -z "$project_name" ] && echo "" 
+    read -t $timeout -p "外部端口（默认输入：7080）" project_port
+    docker_port=${project_port:-7080}
+    [ -z "$project_port" ] && echo ""
+    docker_img="jgraph/drawio"
+    docker_run="docker run -d \
+                    --name=$docker_name \
+                    --restart=always \
+                    -p $docker_port:8080 \
+                    -v $searxng_path/$docker_name:/var/lib/drawio
+                    $docker_img"
+    docker_describe="这是一个强大图表绘制软件。思维导图，拓扑图，流程图，都能画"
+    docker_url="官网介绍: https://www.drawio.com/"
+    docker_use=""
+    docker_passwd=""
+    docker_passwd1=""
+    docker_app
+}
+
+
 # 安装LDNMP环境-NginxProxyManager
 panel_tools() {
     while true; do
@@ -2639,7 +3674,12 @@ panel_tools() {
         echo "7. 安装onlyoffice可道云                8. 安装dujiaoka独角数发卡网  "
         echo "9. 安装epusdt收款地址                  10. onlyoffice在线办公OFFICE "
         echo "11. Nextcloud网盘                     12. Speedtest测速服务面板 "
-        echo "13. portainer容器管理面板              14. Poste.io邮件服务器程序 "                 
+        echo "13. portainer容器管理面板              14. Poste.io邮件服务器程序 "  
+        echo "15. 安装Halo博客网站                   16. QB离线BT磁力下载面板"    
+        echo "17. VScode网页版                      18. UptimeKuma监控工具" 
+        echo "19. Cloudreve网盘                     20. LibreSpeed测速工具" 
+        echo "21. searxng聚合搜索站                 22. PhotoPrism私有相册系统"
+        echo "23. StirlingPDF工具大全               24. drawio免费的在线图表软件"               
         echo "------------------------"
         echo "0. 返回主菜单"
         echo "------------------------"
@@ -2689,7 +3729,37 @@ panel_tools() {
                 ;;
             14)
                 install_Poste
-                ;;            
+                ;;
+            15)
+                install_halo "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;; 
+            16)
+                install_qbittorrent "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;;
+            17)
+                install_vscode_web "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;;  
+            18)
+                install_UptimeKuma "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;;   
+            19)
+                install_cloudreve "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;; 
+            20)
+                install_librespeed "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;;
+            21)
+                install_searxng "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;;
+            22)
+                install_photoprism "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;;
+            23)
+                install_s_pdf "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;;
+            24)
+                install_drawio "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                ;;
             0)
                 break  # 跳出循环，退出菜单
                 ;;
@@ -2705,32 +3775,9 @@ panel_tools() {
 # 设置快捷键
 set_shortcut_keys() {
     read -p "请输入你的快捷按键: " kuaijiejian
-    echo "alias $kuaijiejian='~/kejilion.sh'" >> ~/.bashrc
+    echo "alias $kuaijiejian='~/solin.sh'" >> ~/.bashrc
     source ~/.bashrc
     echo "快捷键已设置"    
-}
-
-# 设置root密码
-set_rootpasswd() {
-
-    echo "设置你的ROOT密码"
-    passwd
-    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config;
-    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config;
-    service sshd restart
-    echo "ROOT登录设置完毕！"
-    read -p "需要重启服务器吗？(Y/N): " choice
-    case "$choice" in
-        [Yy])
-            reboot
-            ;;
-        [Nn])
-            echo "已取消"
-            ;;
-        *)
-            echo "无效的选择，请输入 Y 或 N。"
-            ;;
-    esac
 }
 
 # 安装Python最新版
@@ -2895,15 +3942,18 @@ set_dns() {
     fi
 }
 
-# DD系统1
-dd_xitong_1() {    
-    read -p "请输入你重装后的密码: " vpspasswd
-    install wget
-    bash <(wget --no-check-certificate -qO- 'https://raw.githubusercontent.com/MoeClub/Note/master/InstallNET.sh') $xitong -v 64 -p $vpspasswd -port 22
-}
-
 # DD系统2
 dd_xitong_2() {
+    echo "任意键继续，重装后初始用户名: root  初始密码: LeitboGi0ro  初始端口: 22"
+    read -n 1 -s -r -p ""
+    install wget
+    wget --no-check-certificate -qO InstallNET.sh 'https://raw.githubusercontent.com/leitbogioro/Tools/master/Linux_reinstall/InstallNET.sh' && chmod a+x InstallNET.sh
+}
+
+# DD系统3
+dd_xitong_3() {
+    echo "任意键继续，重装后初始用户名: Administrator  初始密码: Teddysun.com  初始端口: 3389"
+    read -n 1 -s -r -p ""
     install wget
     wget --no-check-certificate -qO InstallNET.sh 'https://raw.githubusercontent.com/leitbogioro/Tools/master/Linux_reinstall/InstallNET.sh' && chmod a+x InstallNET.sh
 }
@@ -2919,14 +3969,28 @@ DD_xitong() {
     case "$choice" in
         [Yy])
             while true; do
+                echo "------------------------"
                 echo "1. Debian 12"
                 echo "2. Debian 11"
                 echo "3. Debian 10"
-                echo "4. Ubuntu 22.04"
-                echo "5. Ubuntu 20.04"
-                echo "6. CentOS 7.9"
-                echo "7. Alpine 3.19"
-                echo -e "8. Windows 11 \033[36mBeta\033[0m"
+                echo "4. Debian 9"
+                echo "------------------------"
+                echo "11. Ubuntu 24.04"
+                echo "12. Ubuntu 22.04"
+                echo "13. Ubuntu 20.04"
+                echo "14. Ubuntu 18.04"
+                echo "------------------------"
+                echo "21. CentOS 9"
+                echo "22. CentOS 8"
+                echo "23. CentOS 7"
+                echo "------------------------"
+                echo "31. Alpine 3.19"
+                echo "------------------------"
+                echo "41. Windows 11"
+                echo "42. Windows 10"
+                echo "43. Windows Server 2022"
+                echo "44. Windows Server 2019"
+                echo "44. Windows Server 2016"
                 echo "------------------------"
                 read -p "请选择要重装的系统: " sys_choice
 
@@ -2950,35 +4014,89 @@ DD_xitong() {
                         exit
                         ;;
                     4)
-                        dd_xitong_2
-                        bash InstallNET.sh -ubuntu
+                        xitong="-d 9"
+                        dd_xitong_1
                         reboot
                         exit
                         ;;
-                    5)
+                    11)
+                        dd_xitong_2
+                        bash InstallNET.sh -ubuntu 24.04
+                        reboot
+                        exit
+                        ;;
+                    12)
+                        dd_xitong_2
+                        bash InstallNET.sh -ubuntu 22.04
+                        reboot
+                        exit
+                        ;;
+                    13)
                         xitong="-u 20.04"
                         dd_xitong_1
                         reboot
                         exit
                         ;;
-                    6)
+                    14)
+                        xitong="-u 18.04"
+                        dd_xitong_1
+                        reboot
+                        exit
+                        ;;
+                    21)
+                        dd_xitong_2
+                        bash InstallNET.sh -centos 9
+                        reboot
+                        exit
+                        ;;
+                    22)
+                        dd_xitong_2
+                        bash InstallNET.sh -centos 8
+                        reboot
+                        exit
+                        ;;   
+                    23)
                         dd_xitong_2
                         bash InstallNET.sh -centos 7
                         reboot
                         exit
                         ;;
-                    7)
+                    31)
                         dd_xitong_2
                         bash InstallNET.sh -alpine
                         reboot
                         exit
                         ;;
-                    8)
-                        dd_xitong_2
-                        bash InstallNET.sh -windows
+                    41)
+                        dd_xitong_3
+                        bash InstallNET.sh -windows 11 -lang "cn"
                         reboot
                         exit
                         ;;
+                    42)
+                        dd_xitong_3
+                        bash InstallNET.sh -windows 10 -lang "cn"
+                        reboot
+                        exit
+                        ;;
+                    43)
+                        dd_xitong_3
+                        bash InstallNET.sh -windows 2022 -lang "cn"
+                        reboot
+                        exit
+                        ;;
+                    44)
+                        dd_xitong_3
+                        bash InstallNET.sh -windows 2019 -lang "cn"
+                        reboot
+                        exit
+                        ;;
+                    45)
+                        dd_xitong_3
+                        bash InstallNET.sh -windows 2016 -lang "cn"
+                        reboot
+                        exit
+                        ;;                    
                     *)
                         echo "无效的选择，请重新输入。"
                         ;;
@@ -3899,10 +5017,10 @@ message_board() {
     remote_ip="66.42.61.110"
     remote_user="liaotian123"
     remote_file="/home/liaotian123/liaotian.txt"
-    password="kejilionYYDS"  # 替换为您的密码
+    password="YYDS"  # 替换为您的密码
 
     clear
-    echo "科技lion留言板"
+    echo "留言板"
     echo "------------------------"
     # 显示已有的留言内容
     sshpass -p "${password}" ssh -o StrictHostKeyChecking=no "${remote_user}@${remote_ip}" "cat '${remote_file}'"
@@ -3927,6 +5045,126 @@ message_board() {
     fi
 
     echo "留言板操作完成。"
+}
+
+tmux_run() {
+    # Check if the session already exists
+    tmux has-session -t $SESSION_NAME 2>/dev/null
+    # $? is a special variable that holds the exit status of the last executed command
+    if [ $? != 0 ]; then
+      # Session doesn't exist, create a new one
+      tmux new -s $SESSION_NAME
+    else
+      # Session exists, attach to it
+      tmux attach-session -t $SESSION_NAME
+    fi
+}
+
+# 工作区域
+work_area() {
+    while true; do
+        clear
+        echo "▶ 我的工作区"
+        echo "系统将为你提供10个后台运行的工作区，你可以用来执行长时间的任务"
+        echo "即使你断开SSH，工作区中的任务也不会中断，非常方便！来试试吧！"
+        echo -e "\033[33m注意: 进入工作区后使用Ctrl+b再单独按d，退出工作区！\033[0m"
+        echo "------------------------"
+        echo "a. 安装工作区环境"
+        echo "------------------------"
+        echo "1. 1号工作区"
+        echo "2. 2号工作区"
+        echo "3. 3号工作区"
+        echo "4. 4号工作区"
+        echo "5. 5号工作区"
+        echo "6. 6号工作区"
+        echo "7. 7号工作区"
+        echo "8. 8号工作区"
+        echo "9. 9号工作区"
+        echo "10. 10号工作区"
+        echo "------------------------"
+        echo "99. 工作区状态"
+        echo "------------------------"
+        echo "b. 卸载工作区"
+        echo "------------------------"
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            a)
+                clear
+                install tmux
+                ;;
+            b)
+                clear
+                remove tmux
+                ;;
+            1)
+                clear
+                SESSION_NAME="work1"
+                tmux_run
+
+                ;;
+            2)
+                clear
+                SESSION_NAME="work2"
+                tmux_run
+                ;;
+            3)
+                clear
+                SESSION_NAME="work3"
+                tmux_run
+                ;;
+            4)
+                clear
+                SESSION_NAME="work4"
+                tmux_run
+                ;;
+            5)
+                clear
+                SESSION_NAME="work5"
+                tmux_run
+                ;;
+            6)
+                clear
+                SESSION_NAME="work6"
+                tmux_run
+                ;;
+            7)
+                clear
+                SESSION_NAME="work7"
+                tmux_run
+                ;;
+            8)
+                clear
+                SESSION_NAME="work8"
+                tmux_run
+                ;;
+            9)
+                clear
+                SESSION_NAME="work9"
+                tmux_run
+                ;;
+            10)
+                clear
+                SESSION_NAME="work10"
+                tmux_run
+                ;;
+
+            99)
+                clear
+                tmux list-sessions
+                ;;
+            0)
+                solin
+                ;;
+            *)
+                echo "无效的输入!"
+                ;;
+        esac
+        break_end
+
+    done
 }
 
 # 系统工具
@@ -4074,11 +5312,15 @@ while true; do
     echo "1. 系统信息查询"
     echo "2. 系统更新"
     echo "3. 系统清理"
-    echo "4. Docker管理器 ▶ "   
-    echo -e "\033[33m5. LDNMP建站-Nginx ▶ \033[0m"
-    echo -e "\033[33m6. LDNMP建站-NginxProxyManager ▶ \033[0m"	
-    echo "7. 系统工具 ▶ "
-    echo "------------------------"
+    echo "4. 常用工具"
+    echo "5. Docker管理器 ▶ "   
+    echo "6. 测试脚本合集 ▶ "  
+    echo "7. 甲骨文云脚本合集 ▶ "
+    echo -e "\033[33m8. LDNMP建站-Nginx ▶ \033[0m"
+    echo -e "\033[33m9. LDNMP建站-NginxProxyManager ▶ \033[0m"	
+    echo "11. 我的工作区 ▶ "
+    echo "10. 系统工具 ▶ "    
+    echo "-----------------------"
     echo "00. 脚本更新"
     echo "------------------------"
     echo "0. 退出脚本"
@@ -4099,16 +5341,32 @@ while true; do
             ;;
         4)
             clear
-            docker_manage 
+            common_tool
             ;;
         5)
             clear
-            install_ldnmp 
+            docker_manage 
             ;;
         6)
-            panel_tools
+            clear
+            test_script
             ;;
         7)
+            clear
+            oracle_script 
+            ;;
+        8)
+            clear
+            install_ldnmp 
+            ;;
+        9)
+            panel_tools
+            ;;
+        10)
+            clear
+            work_area
+            ;; 
+        11)            
             clear
             system_tool
             ;; 
