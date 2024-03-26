@@ -63,107 +63,87 @@ remove() {
     return 0
 }
 
-# 函数: 获取IPv4地址
+# 函数: 获取IPv4和IPv6地址
 ip_address() {
     ipv4_address=$(curl -s ipv4.ip.sb)
-	ipv6_address=$(curl -s --max-time 1 ipv6.ip.sb)
+    ipv6_address=$(curl -s --max-time 1 ipv6.ip.sb)
+}
+
+# 函数: 获取网络接收和发送流量
+network_traffic() {
+    # 使用 awk 从 /proc/net/dev 读取每个接口的接收和发送字节数，并进行累加
+    read rx_total tx_total < <(awk '{if ($1 ~ /^[a-zA-Z0-9]+:$/) {rx+=$2; tx+=$10}} END {print rx, tx}' /proc/net/dev)
+
+    # 初始化单位为 Bytes
+    rx_units="Bytes"
+    tx_units="Bytes"
+
+    # 调用 convert_unit 函数来转换单位
+    convert_unit rx_total rx_units
+    convert_unit tx_total tx_units
+
+    # 构造输出字符串
+    network_output="总接收: $rx_total $rx_units  总发送: $tx_total $tx_units"
+}
+
+# 函数: 单位转换
+convert_unit() {
+    local -n value_ref=$1
+    local -n unit_ref=$2
+
+    # 如果值大于 1 GB
+    if ((value_ref >= 1024**3)); then
+        unit_ref="GB"
+        local gb=$((value_ref / 1024**3))
+        local remainder=$((value_ref % 1024**3))
+        local decimal=$((remainder / (1024**2 / 10)))
+        value_ref="${gb}.${decimal}"
+    # 如果值大于 1 MB
+    elif ((value_ref >= 1024**2)); then
+        unit_ref="MB"
+        local mb=$((value_ref / 1024**2))
+        local remainder=$((value_ref % 1024**2))
+        local decimal=$((remainder / (1024 / 10)))
+        value_ref="${mb}.${decimal}"
+    # 如果值大于 1 KB
+    elif ((value_ref >= 1024)); then
+        unit_ref="KB"
+        local kb=$((value_ref / 1024))
+        local remainder=$((value_ref % 1024))
+        local decimal=$((remainder / (10)))
+        value_ref="${kb}.${decimal}"
+    fi
+    # 如果值小于 1 KB，则保持 Bytes 单位，不需要转换
 }
 
 # 函数: 显示系统信息
 show_system_info() {
     clear
     # 获取IP地址
-	ip_address
+    ip_address
 
     # 获取CPU信息
-    if [ "$(uname -m)" == "x86_64" ]; then
-      cpu_info=$(cat /proc/cpuinfo | grep 'model name' | uniq | sed -e 's/model name[[:space:]]*: //')
-    else
-      cpu_info=$(lscpu | grep 'BIOS Model name' | awk -F': ' '{print $2}' | sed 's/^[ \t]*//')
-    fi
-
-    if [ -f /etc/alpine-release ]; then
-        # Alpine Linux 使用以下命令获取 CPU 使用率
-        cpu_usage_percent=$(top -bn1 | grep '^CPU' | awk '{print " "$4}' | cut -c 1-2)
-    else
-        # 其他系统使用以下命令获取 CPU 使用率
-        cpu_usage_percent=$(top -bn1 | grep "Cpu(s)" | awk '{print " "$2}')
-    fi
-
-
+    cpu_info=$(awk -F ': ' '/model name/ {print $2; exit}' /proc/cpuinfo)
+    cpu_usage_percent=$(awk '/^%Cpu/ {print int($2)}' <(top -bn1))
     cpu_cores=$(nproc)
-
-    mem_info=$(free -b | awk 'NR==2{printf "%.2f/%.2f MB (%.2f%%)", $3/1024/1024, $2/1024/1024, $3*100/$2}')
-
+    mem_info=$(free -m | awk '/Mem:/ {printf "%.2f/%.2f MB (%.2f%%)", $3, $2, $3*100/$2 }')
     disk_info=$(df -h | awk '$NF=="/"{printf "%s/%s (%s)", $3, $2, $5}')
+    network_traffic
 
-    country=$(curl -s ipinfo.io/country)
-    city=$(curl -s ipinfo.io/city)
-
+    # 获取其他系统信息
     isp_info=$(curl -s ipinfo.io/org)
-
     cpu_arch=$(uname -m)
-
     hostname=$(hostname)
-
     kernel_version=$(uname -r)
-
     congestion_algorithm=$(sysctl -n net.ipv4.tcp_congestion_control)
     queue_algorithm=$(sysctl -n net.core.default_qdisc)
-
-    # 尝试使用 lsb_release 获取系统信息
-    os_info=$(lsb_release -ds 2>/dev/null)
-
-    # 如果 lsb_release 命令失败，则尝试其他方法
-    if [ -z "$os_info" ]; then
-      # 检查常见的发行文件
-      if [ -f "/etc/os-release" ]; then
-        os_info=$(source /etc/os-release && echo "$PRETTY_NAME")
-      elif [ -f "/etc/debian_version" ]; then
-        os_info="Debian $(cat /etc/debian_version)"
-      elif [ -f "/etc/redhat-release" ]; then
-        os_info=$(cat /etc/redhat-release)
-      else
-        os_info="Unknown"
-      fi
-    fi
-
-    output=$(awk 'BEGIN { rx_total = 0; tx_total = 0 }
-        NR > 2 { rx_total += $2; tx_total += $10 }
-        END {
-            rx_units = "Bytes";
-            tx_units = "Bytes";
-            if (rx_total > 1024) { rx_total /= 1024; rx_units = "KB"; }
-            if (rx_total > 1024) { rx_total /= 1024; rx_units = "MB"; }
-            if (rx_total > 1024) { rx_total /= 1024; rx_units = "GB"; }
-
-            if (tx_total > 1024) { tx_total /= 1024; tx_units = "KB"; }
-            if (tx_total > 1024) { tx_total /= 1024; tx_units = "MB"; }
-            if (tx_total > 1024) { tx_total /= 1024; tx_units = "GB"; }
-
-            printf("总接收: %.2f %s\n总发送: %.2f %s\n", rx_total, rx_units, tx_total, tx_units);
-        }' /proc/net/dev)
-
-
+    os_info=$(awk -F= '/^PRETTY_NAME/ {print $2}' /etc/os-release | tr -d '"')
     current_time=$(date "+%Y-%m-%d %I:%M %p")
+    swap_info=$(free -m | awk '/Swap:/ {printf "%dMB/%dMB (%.2f%%)", $3, $2, $3*100/$2 }')
+    runtime=$(awk '{printf "%d天 %d小时 %d分钟\n", int($1/86400), int(($1%86400)/3600), int(($1%3600)/60)}' /proc/uptime)
 
-
-    swap_used=$(free -m | awk 'NR==3{print $3}')
-    swap_total=$(free -m | awk 'NR==3{print $2}')
-
-    if [ "$swap_total" -eq 0 ]; then
-        swap_percentage=0
-    else
-        swap_percentage=$((swap_used * 100 / swap_total))
-    fi
-
-    swap_info="${swap_used}MB/${swap_total}MB (${swap_percentage}%)"
-
-    runtime=$(cat /proc/uptime | awk -F. '{run_days=int($1 / 86400);run_hours=int(($1 % 86400) / 3600);run_minutes=int(($1 % 3600) / 60); if (run_days > 0) printf("%d天 ", run_days); if (run_hours > 0) printf("%d时 ", run_hours); printf("%d分\n", run_minutes)}')
-
-	# 输出信息
-	cat << EOF
-
+    # 输出系统信息
+    cat << EOF
 系统信息查询
 ------------------------
 主机名: $hostname
@@ -175,28 +155,26 @@ Linux版本: $kernel_version
 CPU架构: $cpu_arch
 CPU型号: $cpu_info
 CPU核心数: $cpu_cores
-------------------------
-CPU占用: $cpu_usage_percent
+CPU占用: ${cpu_usage_percent}%
 物理内存: $mem_info
 虚拟内存: $swap_info
 硬盘占用: $disk_info
 ------------------------
-$output
+$network_output
 ------------------------
 网络拥堵算法: $congestion_algorithm $queue_algorithm
 ------------------------
 公网IPv4地址: $ipv4_address
 公网IPv6地址: $ipv6_address
 ------------------------
-地理位置: $country $city
 系统时间: $current_time
-------------------------
 系统运行时长: $runtime
 EOF
 }
 
 # 函数：更新系统
 update_service() {
+    echo "开始更新系统..."
     # Update system on Debian-based systems
     if [ -f "/etc/debian_version" ]; then
         apt update -y && DEBIAN_FRONTEND=noninteractive apt full-upgrade -y
@@ -545,6 +523,56 @@ common_tool() {
         break_end
     done
 
+}
+
+#BBR脚本
+bbr_script() {
+    clear
+    if [ -f "/etc/alpine-release" ]; then
+        while true; do
+            clear
+            congestion_algorithm=$(sysctl -n net.ipv4.tcp_congestion_control)
+            queue_algorithm=$(sysctl -n net.core.default_qdisc)
+            echo "当前TCP阻塞算法: $congestion_algorithm $queue_algorithm"
+
+            echo ""
+            echo "BBR管理"
+            echo "------------------------"
+            echo "1. 开启BBRv3              2. 关闭BBRv3（会重启）"
+            echo "------------------------"
+            echo "0. 返回上一级选单"
+            echo "------------------------"
+            read -p "请输入你的选择: " sub_choice
+
+            case $sub_choice in
+                1)
+                    cat > /etc/sysctl.conf << EOF
+net.core.default_qdisc=fq_pie
+net.ipv4.tcp_congestion_control=bbr
+EOF
+                    sysctl -p
+                    ;;
+                2)
+                    sed -i '/net.core.default_qdisc=fq_pie/d' /etc/sysctl.conf
+                    sed -i '/net.ipv4.tcp_congestion_control=bbr/d' /etc/sysctl.conf
+                    sysctl -p
+                    reboot
+                    ;;
+                0)
+                    break  # 跳出循环，退出菜单
+                    ;;
+
+                *)
+                    break  # 跳出循环，退出菜单
+                    ;;
+            esac
+        done
+    else
+        install wget
+        wget --no-check-certificate -O tcpx.sh https://raw.githubusercontent.com/ylx2016/Linux-NetSpeed/master/tcpx.sh
+        chmod +x tcpx.sh
+        ./tcpx.sh
+    fi
 }
 
 # 定义安装更新 Docker 的函数
@@ -1221,6 +1249,81 @@ oracle_script() {
     done
 }
 
+# GCP DD系统1
+gcp_xitong_1() {    
+    read -p "请输入你重装后的密码: " vpspasswd
+    read -p "请输入你需要重装的VPS的内网IP: " ip_addr
+    # 简单验证IP地址格式
+    if [[ $ip_addr =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        gateway="${ip_addr%.*}.1"
+        echo "任意键继续，重装后初始用户名: root  初始密码: $vpspasswd  初始端口: 22"
+        read -n 1 -s -r -p ""
+        install wget
+        bash <(wget --no-check-certificate -qO- 'https://raw.githubusercontent.com/MoeClub/Note/master/InstallNET.sh') --ip-addr $ip_addr --ip-gate $gateway --ip-mask 255.255.255.0 $xitong -v 64 -p $vpspasswd -port 22 
+    else
+        echo "输入的IP地址格式不正确。"
+    fi
+}
+
+#谷歌云脚本
+gcp_script() {
+    while true; do
+        clear
+        echo "▶ 谷歌云脚本合集"
+        echo "------------------------"
+        echo "1. DD重装系统脚本"
+        echo "------------------------"
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            1)
+                clear
+                echo "请备份数据，将为你重装系统，预计花费15分钟。"
+                read -p "确定继续吗？(Y/N): " choice
+
+                case "$choice" in
+                    [Yy])
+                        while true; do
+                            read -p "请选择要重装的系统:  1. Debian12 | 2. Ubuntu20.04 : " sys_choice
+
+                            case "$sys_choice" in
+                                1)
+                                    xitong="-d 12"
+                                    break  # 结束循环
+                                    ;;
+                                2)
+                                    xitong="-u 20.04"
+                                    break  # 结束循环
+                                    ;;
+                                *)
+                                    echo "无效的选择，请重新输入。"
+                                    ;;
+                            esac
+                        done
+                        
+                        gcp_xitong_1
+                        ;;
+                    [Nn])
+                        echo "已取消"
+                        ;;
+                    *)
+                        echo "无效的选择，请输入 Y 或 N。"
+                        ;;
+                esac
+                ;;
+            0)
+                # 退出脚本
+                solin
+                ;;
+            *)
+                echo "无效的选项，请重新输入！"
+                ;;
+        esac    
+    done
+}
+
 # 定义检测端口
 check_port() {
     # 如果未传递端口参数，则默认为443
@@ -1286,27 +1389,74 @@ default_server_ssl() {
 
 }
 
-# 创建必要的目录和文件
-create_ldnmp_file() {
-
-    # 创建必要的目录和文件
-    mkdir -p /home/docker && cd /home/docker && mkdir -p web/html web/mysql web/certs web/conf.d web/redis web/log/nginx && touch web/docker-compose.yml
-
+# nginx 配置
+nginx_config() {
+   # 创建必要的目录和文件
+    mkdir -p /home/docker && cd /home/docker && mkdir -p html web/certs web/conf.d web/log/nginx && touch web/docker-compose-nginx.yml
     wget -O /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/nginx.conf
     wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/default.conf
     default_server_ssl
+    docker rm -f nginx >/dev/null 2>&1
+    docker rmi nginx >/dev/null 2>&1
+
+    wget -O /home/docker/web/docker-compose-nginx.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/docker-compose-nginx.yml
+    
+}
+
+# 安装 nginx
+install_nginx() {
+    nginx_config
+    cd /home/docker/web && docker-compose -f docker-compose-nginx.yml up -d
+}
+
+# 创建必要的目录和文件
+create_mysql_redis_php_file() {
+
+    # 创建必要的目录和文件
+    mkdir -p /home/docker && cd /home/docker && mkdir -p html mysql redis && touch docker-compose-mysql_redis_php.yml
 
     # 下载 docker-compose.yml 文件并进行替换
-    wget -O /home/docker/web/docker-compose.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/docker-compose.yml
+    wget -O /home/docker/docker-compose-mysql_redis_php.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/docker-compose-mysql_redis_php.yml
 
+    install openssl
     dbrootpasswd=$(openssl rand -base64 16) && dbuse=$(openssl rand -hex 4) && dbusepasswd=$(openssl rand -base64 8)
 
     # 在 docker-compose.yml 文件中进行替换
-    sed -i "s|mysqlwebroot|$dbrootpasswd|g" /home/docker/web/docker-compose.yml
-    sed -i "s|mysqlpasswd|$dbusepasswd|g" /home/docker/web/docker-compose.yml
-    sed -i "s|mysqluse|$dbuse|g" /home/docker/web/docker-compose.yml
+    sed -i "s|mysqlwebroot|$dbrootpasswd|g" /home/docker/docker-compose-mysql_redis_php.yml
+    sed -i "s|mysqlpasswd|$dbusepasswd|g" /home/docker/docker-compose-mysql_redis_php.yml
+    sed -i "s|mysqluse|$dbuse|g" /home/docker/docker-compose-mysql_redis_php.yml
+}
 
-    cd /home/docker/web && docker-compose up -d
+# 安装mysql_redis_php
+install_prm() {
+    create_mysql_redis_php_file
+    cd /home/docker && docker-compose -f docker-compose-mysql_redis_php.yml up -d
+}
+
+# 仅安装nginx
+nginx_display() {
+
+    clear
+    nginx_version=$(docker exec nginx nginx -v 2>&1)
+    nginx_version=$(echo "$nginx_version" | grep -oP "nginx/\K[0-9]+\.[0-9]+\.[0-9]+")
+    echo "nginx已安装完成"
+    echo "当前版本: v$nginx_version"
+    echo ""
+}
+
+# 创建必要的目录和文件
+create_ldnmp_file() {
+    nginx_config
+    create_mysql_redis_php_file
+    # 输出一个空行到目标文件
+    echo "" >> /home/docker/web/docker-compose-nginx.yml
+
+    # 追加经过筛选的内容（除去第一行和包含'version:'的行）
+    sed -n '/services:/,$p' /home/docker/docker-compose-mysql_redis_php.yml | sed '1d' | sed '/version:/d' >> /home/docker/web/docker-compose-nginx.yml
+
+    # 复制修改后的文件，并重命名
+    cp /home/docker/web/docker-compose-nginx.yml /home/docker/docker-compose.yml
+    cd /home/docker && docker-compose up -d
 }
 
 # 配置LDNMP环境
@@ -1402,7 +1552,7 @@ ldnmp_info() {
     echo -n "nginx : v$nginx_version"
 
     # 获取mysql版本
-    dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/web/docker-compose.yml | tr -d '[:space:]')
+    dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/docker-compose.yml | tr -d '[:space:]')
     mysql_version=$(docker exec mysql mysql -u root -p"$dbrootpasswd" -e "SELECT VERSION();" 2>/dev/null | tail -n 1)
     echo -n "            mysql : v$mysql_version"
 
@@ -1436,7 +1586,6 @@ iptables_open() {
     ip6tables -P FORWARD ACCEPT
     ip6tables -P OUTPUT ACCEPT
     ip6tables -F
-
 }
 
 # 获取SSL
@@ -1515,14 +1664,14 @@ wordpress_config() {
     wget -O /home/docker/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/wordpress/wordpress.com.conf
     sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
 
-    cd /home/docker/web/html
+    cd /home/docker/html
     mkdir $yuming
     cd $yuming
     wget -O latest.zip https://cn.wordpress.org/latest-zh_CN.zip
     unzip latest.zip
     rm latest.zip
 
-    echo "define('FS_METHOD', 'direct'); define('WP_REDIS_HOST', 'redis'); define('WP_REDIS_PORT', '6379');" >> /home/docker/web/html/$yuming/wordpress/wp-config-sample.php
+    echo "define('FS_METHOD', 'direct'); define('WP_REDIS_HOST', 'redis'); define('WP_REDIS_PORT', '6379');" >> /home/docker/html/$yuming/wordpress/wp-config-sample.php
 }
 
 # wordpress 显示
@@ -1556,13 +1705,13 @@ nginx_status() {
     if [ "$container_status" == "running" ]; then
         echo ""
     else
-        rm -r /home/docker/web/html/$yuming >/dev/null 2>&1
+        rm -r /home/docker/html/$yuming >/dev/null 2>&1
         rm /home/docker/web/conf.d/$yuming.conf >/dev/null 2>&1
         rm /home/docker/web/certs/${yuming}_key.pem >/dev/null 2>&1
         rm /home/docker/web/certs/${yuming}_cert.pem >/dev/null 2>&1
         docker restart nginx >/dev/null 2>&1
 
-        dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/web/docker-compose.yml | tr -d '[:space:]')
+        dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/docker-compose.yml | tr -d '[:space:]')
         docker exec mysql mysql -u root -p"$dbrootpasswd" -e "DROP DATABASE $dbname;" 2> /dev/null
 
         echo -e "\e[1;31m检测到域名证书申请失败，请检测域名是否正确解析或更换域名重新尝试！\e[0m"
@@ -1575,7 +1724,7 @@ kodbox_config() {
     wget -O /home/docker/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/kodbox/kodbox.com.conf
     sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
 
-    cd /home/docker/web/html
+    cd /home/docker/html
     mkdir $yuming
     cd $yuming
 
@@ -1605,7 +1754,7 @@ dujiaoka_config() {
 
     sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
 
-    cd /home/docker/web/html
+    cd /home/docker/html
     mkdir $yuming
     cd $yuming
 
@@ -1638,36 +1787,7 @@ dujiaoka_display() {
     echo "------------------------"
     echo "登录时右上角如果出现红色error0请使用如下命令: "
     echo "我也很气愤独角数卡为啥这么麻烦，会有这样的问题！"
-    echo "sed -i 's/ADMIN_HTTPS=false/ADMIN_HTTPS=true/g' /home/docker/web/html/$yuming/dujiaoka/.env"
-}
-
-# 添加discuz 配置
-discuz_config() {
-
-    wget -O /home/docker/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/discuz/discuz.com.conf
-
-    sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
-
-    cd /home/docker/web/html
-    mkdir $yuming
-    cd $yuming
-    wget https://github.com/zxl2008gz/docker/raw/main/discuz/Discuz_X3.5_SC_UTF8_20230520.zip
-    unzip -o Discuz_X3.5_SC_UTF8_20230520.zip
-    rm Discuz_X3.5_SC_UTF8_20230520.zip
-}
-
-# discuz 显示
-discuz_display() {
-    clear
-    echo "您的Discuz论坛搭建好了！"
-    echo "https://$yuming"
-    echo "------------------------"
-    echo "安装信息如下: "
-    echo "数据库地址: mysql"
-    echo "数据库名: $dbname"
-    echo "用户名: $dbuse"
-    echo "密码: $dbusepasswd"
-    echo "表前缀: discuz_"
+    echo "sed -i 's/ADMIN_HTTPS=false/ADMIN_HTTPS=true/g' /home/docker/html/$yuming/dujiaoka/.env"
 }
 
 # 添加cms 配置
@@ -1677,15 +1797,15 @@ cms_config() {
 
     sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
 
-    cd /home/docker/web/html
+    cd /home/docker/html
     mkdir $yuming
     cd $yuming
 
     wget https://github.com/magicblack/maccms_down/raw/master/maccms10.zip && unzip maccms10.zip && rm maccms10.zip
-    cd /home/docker/web/html/$yuming/template/ && wget https://github.com/zxl2008gz/docker/raw/main/CMS/DYXS2.zip && unzip DYXS2.zip && rm /home/docker/web/html/$yuming/template/DYXS2.zip
-    cp /home/docker/web/html/$yuming/template/DYXS2/asset/admin/Dyxs2.php /home/docker/web/html/$yuming/application/admin/controller
-    cp /home/docker/web/html/$yuming/template/DYXS2/asset/admin/dycms.html /home/docker/web/html/$yuming/application/admin/view/system
-    mv /home/docker/web/html/$yuming/admin.php /home/docker/web/html/$yuming/vip.php && wget -O /home/docker/web/html/$yuming/application/extra/maccms.php https://raw.githubusercontent.com/zxl2008gz/docker/main/CMS/maccms.php
+    cd /home/docker/html/$yuming/template/ && wget https://github.com/zxl2008gz/docker/raw/main/CMS/DYXS2.zip && unzip DYXS2.zip && rm /home/docker/html/$yuming/template/DYXS2.zip
+    cp /home/docker/html/$yuming/template/DYXS2/asset/admin/Dyxs2.php /home/docker/html/$yuming/application/admin/controller
+    cp /home/docker/html/$yuming/template/DYXS2/asset/admin/dycms.html /home/docker/html/$yuming/application/admin/view/system
+    mv /home/docker/html/$yuming/admin.php /home/docker/html/$yuming/vip.php && wget -O /home/docker/html/$yuming/application/extra/maccms.php https://raw.githubusercontent.com/zxl2008gz/docker/main/CMS/maccms.php
 
 }
 
@@ -1714,7 +1834,7 @@ flarum_config() {
 
     sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
 
-    cd /home/docker/web/html
+    cd /home/docker/html
     mkdir $yuming
     cd $yuming
 
@@ -1844,26 +1964,6 @@ install_cloudreve() {
     fi    
 }
 
-# 仅安装nginx
-install_nginx() {
-    # 创建必要的目录和文件
-    mkdir -p /home/docker && cd /home/docker && mkdir -p web/html web/mysql web/certs web/conf.d web/redis web/log/nginx && touch web/docker-compose.yml
-    wget -O  /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/nginx.conf
-    wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/default.conf
-    default_server_ssl
-
-    docker rm -f nginx >/dev/null 2>&1
-    docker rmi nginx >/dev/null 2>&1
-    docker run -d --name nginx --restart always -p 80:80 -p 443:443 -p 443:443/udp -v /home/docker/web/nginx.conf:/etc/nginx/nginx.conf -v /home/docker/web/conf.d:/etc/nginx/conf.d -v /home/docker/web/certs:/etc/nginx/certs -v /home/docker/web/html:/var/www/html -v /home/docker/web/log/nginx:/var/log/nginx nginx:alpine
-
-    clear
-    nginx_version=$(docker exec nginx nginx -v 2>&1)
-    nginx_version=$(echo "$nginx_version" | grep -oP "nginx/\K[0-9]+\.[0-9]+\.[0-9]+")
-    echo "nginx已安装完成"
-    echo "当前版本: v$nginx_version"
-    echo ""
-}
-
 # 站点重定向配置
 redirect_config() {
 
@@ -1900,7 +2000,7 @@ custom_static() {
     wget -O /home/docker/web/conf.d/$yuming.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/html.conf
     sed -i "s/yuming.com/$yuming/g" /home/docker/web/conf.d/$yuming.conf
 
-    cd /home/docker/web/html
+    cd /home/docker/html
     mkdir $yuming
     cd $yuming
 
@@ -1961,14 +2061,14 @@ site_manage() {
         echo ""
         echo "数据库信息"
         echo "------------------------"
-        dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/web/docker-compose.yml | tr -d '[:space:]')
+        dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/docker-compose.yml | tr -d '[:space:]')
         docker exec mysql mysql -u root -p"$dbrootpasswd" -e "SHOW DATABASES;" 2> /dev/null | grep -Ev "Database|information_schema|mysql|performance_schema|sys"
 
         echo "------------------------"
         echo ""
         echo "站点目录"
         echo "------------------------"
-        echo -e "数据 \e[37m/home/docker/web/html\e[0m     证书 \e[37m/home/docker/web/certs\e[0m     配置 \e[37m/home/docker/web/conf.d\e[0m"
+        echo -e "数据 \e[37m/home/docker/html\e[0m     证书 \e[37m/home/docker/web/certs\e[0m     配置 \e[37m/home/docker/web/conf.d\e[0m"
         echo "------------------------"
         echo ""
         echo "操作"
@@ -1992,7 +2092,7 @@ site_manage() {
                 install_ssltls
                 mv /home/docker/web/conf.d/$oldyuming.conf /home/docker/web/conf.d/$yuming.conf
                 sed -i "s/$oldyuming/$yuming/g" /home/docker/web/conf.d/$yuming.conf
-                mv /home/docker/web/html/$oldyuming /home/docker/web/html/$yuming
+                mv /home/docker/html/$oldyuming /home/docker/html/$yuming
 
                 rm /home/docker/web/certs/${oldyuming}_key.pem
                 rm /home/dcoker/web/certs/${oldyuming}_cert.pem     
@@ -2009,7 +2109,7 @@ site_manage() {
                 ;;
             7)
                 read -p "请输入你的域名: " yuming
-                rm -r /home/docker/web/html/$yuming
+                rm -r /home/docker/html/$yuming
                 rm /home/docker/web/conf.d/$yuming.conf
                 rm /home/docker/web/certs/${yuming}_key.pem
                 rm /home/docker/web/certs/${yuming}_cert.pem
@@ -2017,7 +2117,7 @@ site_manage() {
                 ;;
             8)
                 read -p "请输入数据库名: " shujuku
-                dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/web/docker-compose.yml | tr -d '[:space:]')
+                dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/docker-compose.yml | tr -d '[:space:]')
                 docker exec mysql mysql -u root -p"$dbrootpasswd" -e "DROP DATABASE $shujuku;" 2> /dev/null
                 ;;
             0)
@@ -2189,6 +2289,10 @@ site_defense_program() {
         elif [ -f /etc/redhat-release ]; then
             # CentOS系统
             install epel-release fail2ban
+        elif [ -f /etc/alpine-release ]; then
+            # Alpine系统
+            apk update
+            apk add fail2ban
         else
             echo "不支持的操作系统类型"
             exit 1
@@ -2205,19 +2309,8 @@ site_defense_program() {
         cd /etc/fail2ban/jail.d/
         curl -sS -O https://raw.githubusercontent.com/zxl2008gz/sh/main/sshd.local
         systemctl restart fail2ban
-        docker rm -f nginx
-
-        wget -O /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/nginx.conf
-        wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/default.conf
-        default_server_ssl
-
-        #获取网络名称
-        dir_name=$(basename $(dirname "/home/docker/web/docker-compose.yml"))
-        # 构造默认网络名称
-        network_name="${dir_name}_default"
-
-        docker run -d --name nginx --restart always --network $network_name -p 80:80 -p 443:443 -v /home/docker/web/nginx.conf:/etc/nginx/nginx.conf -v /home/docker/web/conf.d:/etc/nginx/conf.d -v /home/docker/web/certs:/etc/nginx/certs -v /home/docker/web/html:/var/www/html -v /home/docker/web/log/nginx:/var/log/nginx nginx
-        docker exec -it nginx chmod -R 777 /var/www/html
+        
+        install_nginx
 
         # 获取宿主机当前时区
         HOST_TIMEZONE=$(timedatectl show --property=Timezone --value)
@@ -2324,9 +2417,8 @@ install_ldnmp() {
         echo "3. 安装可道云桌面"
         echo "4. 安装onlyoffice可道云版本"
         echo "5. 安装独角数发卡网"
-        echo "6. 安装Discuz论坛"
-        echo "7. 安装苹果CMS网站"
-        echo "8. 安装flarum论坛网站"
+        echo "6. 安装苹果CMS网站"
+        echo "7. 安装flarum论坛网站"
         echo "------------------------"	
         echo "21. 安装epusdt收款地址          22. 安装LobeChat聊天网站" 
         echo "23. 安装GeminiPro聊天网站       24. 安装vaultwarden密码管理平台" 
@@ -2378,7 +2470,7 @@ install_ldnmp() {
                 clear
                 add_yuming
                 install_ssltls
-                add_db "$yuming" "/home/docker/web/docker-compose.yml" 
+                add_db "$yuming" "/home/docker/docker-compose.yml" 
                 wordpress_config
                 restart_ldnmp
                 wordpress_display
@@ -2388,7 +2480,7 @@ install_ldnmp() {
                 clear
                 add_yuming
                 install_ssltls
-                add_db "$yuming" "/home/docker/web/docker-compose.yml"
+                add_db "$yuming" "/home/docker/docker-compose.yml"
                 kodbox_config
                 restart_ldnmp
                 kodbox_display
@@ -2409,7 +2501,7 @@ install_ldnmp() {
                 clear
                 add_yuming
                 install_ssltls
-                add_db "$yuming" "/home/docker/web/docker-compose.yml"
+                add_db "$yuming" "/home/docker/docker-compose.yml"
                 dujiaoka_config
                 restart_ldnmp				
                 dujiaoka_display
@@ -2419,27 +2511,17 @@ install_ldnmp() {
                 clear
                 add_yuming
                 install_ssltls
-                add_db "$yuming" "/home/docker/web/docker-compose.yml"
-                discuz_config
+                add_db "$yuming" "/home/docker/docker-compose.yml"
+                cms_config
                 restart_ldnmp				
-                discuz_display
+                cms_display
                 nginx_status
                 ;;  
             7)
                 clear
                 add_yuming
                 install_ssltls
-                add_db "$yuming" "/home/docker/web/docker-compose.yml"
-                cms_config
-                restart_ldnmp				
-                cms_display
-                nginx_status
-                ;;  
-            8)
-                clear
-                add_yuming
-                install_ssltls
-                add_db "$yuming" "/home/docker/web/docker-compose.yml"
+                add_db "$yuming" "/home/docker/docker-compose.yml"
                 flarum_config
                 restart_ldnmp				
                 flarum_display
@@ -2449,66 +2531,66 @@ install_ldnmp() {
                 clear
                 add_yuming
 				install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_epusdt "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_epusdt "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"
                 ;;
             22)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                get_dbusepasswd "/home/docker/web/docker-compose.yml"
-                install_lobe "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                get_dbusepasswd "/home/docker/docker-compose.yml"
+                install_lobe "/home/docker/docker-compose.yml"
                 ;;
             23)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_geminiPro "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_geminiPro "/home/docker/docker-compose.yml"
                 ;;
             24)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_vaultwarden "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_vaultwarden "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"
                 ;;
             25)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_onlyoffice "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_onlyoffice "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"
                 ;;
             26)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_nextcloud "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_nextcloud "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"
                 ;;
             27)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_speedtest "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_speedtest "/home/docker/docker-compose.yml"
                 ;;
             28)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_portainer "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_portainer "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"
                 ;;
             29)
                 install_Poste
@@ -2517,81 +2599,81 @@ install_ldnmp() {
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_halo "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_halo "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"
                 ;; 
             31)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_qbittorrent "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_qbittorrent "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"
                 ;;  
             32)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_vscode_web "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_vscode_web "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"
                 ;;
             33)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_UptimeKuma "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_UptimeKuma "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"
                 ;;
             34)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming                
-                install_cloudreve "/home/docker/web/docker-compose.yml"
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming                
+                install_cloudreve "/home/docker/docker-compose.yml"
                 ;;  
             35)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming 
-                install_librespeed "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                              
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming 
+                install_librespeed "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"                              
                 ;;
             36)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_searxng "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_searxng "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"                
                 ;;
             37)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_photoprism "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_photoprism "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"                
                 ;; 
             38)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_s_pdf "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_s_pdf "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"                
                 ;;
             39)
                 clear
                 add_yuming
                 install_ssltls
-                cd /home/docker/web/html
-                mkdir -p /home/docker/web/html/$yuming
-                install_drawio "/home/docker/web/html/$yuming" "/home/docker/web/docker-compose.yml"                
+                cd /home/docker/html
+                mkdir -p /home/docker/html/$yuming
+                install_drawio "/home/docker/html/$yuming" "/home/docker/docker-compose.yml"                
                 ;;                             
             61)
                 check_port
@@ -2599,6 +2681,7 @@ install_ldnmp() {
                 install_docker
                 install_certbot
                 install_nginx
+                nginx_display
                 ;;  
             62)
                 clear
@@ -2708,7 +2791,7 @@ install_ldnmp() {
 # 定义一个函数
 check_path_and_output() {
     local input_path="$1"
-    local defined_path="/home/docker/web/docker-compose.yml"
+    local defined_path="/home/docker/docker-compose.yml"
 
     # 比较输入路径和预定义路径
     if [ "$input_path" == "$defined_path" ]; then
@@ -2831,31 +2914,13 @@ nginx-proxy-manager() {
     docker_app
 }
 
-# 创建必要的目录和文件
-create_mysql_redis_php_file() {
 
-    # 创建必要的目录和文件
-    mkdir -p /home/docker/mysql_redis_php && cd /home/docker/mysql_redis_php && mkdir -p html mysql redis && touch docker-compose.yml
-
-    # 下载 docker-compose.yml 文件并进行替换
-    wget -O /home/docker/mysql_redis_php/docker-compose.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/mysql_redis_php/docker-compose.yml
-
-    install openssl
-    dbrootpasswd=$(openssl rand -base64 16) && dbuse=$(openssl rand -hex 4) && dbusepasswd=$(openssl rand -base64 8)
-
-    # 在 docker-compose.yml 文件中进行替换
-    sed -i "s|mysqlwebroot|$dbrootpasswd|g" /home/docker/mysql_redis_php/docker-compose.yml
-    sed -i "s|mysqlpasswd|$dbusepasswd|g" /home/docker/mysql_redis_php/docker-compose.yml
-    sed -i "s|mysqluse|$dbuse|g" /home/docker/mysql_redis_php/docker-compose.yml
-
-    cd /home/docker/mysql_redis_php && docker-compose up -d
-}
 
 # 获取mysql_redis_php的信息
 mysql_redis_php_info() {
 
     # 获取mysql版本
-    dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/mysql_redis_php/docker-compose.yml | tr -d '[:space:]')
+    dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/docker-compose-mysql_redis_php.yml | tr -d '[:space:]')
     mysql_version=$(docker exec mysql mysql -u root -p"$dbrootpasswd" -e "SELECT VERSION();" 2>/dev/null | tail -n 1)
     echo -n "mysql : v$mysql_version"
 
@@ -2873,10 +2938,10 @@ mysql_redis_php_info() {
 
 # 安装mysql-redis-php
 install_mysql_redis_php() {
-
+ 
     install_dependency
     install_docker
-    create_mysql_redis_php_file
+    install_prm
     install_php
     clear
     echo "mysql_redis_php环境安装完毕"
@@ -2956,7 +3021,8 @@ install_geminiPro() {
 # 安装vaultwarden密码管理平台
 install_vaultwarden() {
 
-    mysql_redis_php_path="$1"
+    vaultwarden_path="$1"
+    mysql_redis_php_path="$2"
     # 设置超时时间（秒）
     timeout=20
     read -t $timeout -p "项目名称（默认输入：vaultwarden）" project_name
@@ -2980,7 +3046,7 @@ install_vaultwarden() {
                     -e SENDS_ALLOWED=true \
                     -e EMERGENCY_ACCESS_ALLOWED=true \
                     -e WEB_VAULT_ENABLED=true \
-                    -v /home/docker/$docker_name:/data \
+                    -v $vaultwarden_path/$docker_name:/data \
                     --restart=always \
                     $docker_img"
     docker_describe="Bitwarden 是一款广受欢迎的开源密码管理器，它提供了一个安全的方式来存储和管理个人和工作上的各种密码和敏感信息。"
@@ -3262,7 +3328,7 @@ install_portainer() {
 }
 
 # 邮件服务程序
-install_Poste() {
+install_Post--;/e() {
     if docker inspect mailserver &>/dev/null; then
 
         clear
@@ -3701,72 +3767,72 @@ panel_tools() {
                 install_mysql_redis_php
                 ;;
             3)  
-                get_dbusepasswd "/home/docker/mysql_redis_php/docker-compose.yml"
-                install_lobe "/home/docker/mysql_redis_php/docker-compose.yml"
+                get_dbusepasswd "/home/docker/docker-compose-mysql_redis_php.yml"
+                install_lobe "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             4)
-                install_geminiPro "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_geminiPro "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             5)
-                install_vaultwarden "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_vaultwarden "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             6)
-                install_kodbox "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_kodbox "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             7)
                 install_onlyoffice_kodbox
                 onlyoffice_kod_display
                 ;;
             8)
-                install_dujiaoka "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_dujiaoka "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             9)
-                install_epusdt "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_epusdt "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             10)
-                install_onlyoffice "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_onlyoffice "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             11)
-                install_nextcloud "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_nextcloud "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             12) 
-                install_speedtest "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_speedtest "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             13)
-                install_portainer "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_portainer "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             14)
                 install_Poste
                 ;;
             15)
-                install_halo "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_halo "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;; 
             16)
-                install_qbittorrent "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_qbittorrent "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             17)
-                install_vscode_web "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_vscode_web "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;  
             18)
-                install_UptimeKuma "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_UptimeKuma "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;   
             19)
-                install_cloudreve "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_cloudreve "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;; 
             20)
-                install_librespeed "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_librespeed "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             21)
-                install_searxng "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_searxng "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             22)
-                install_photoprism "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_photoprism "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             23)
-                install_s_pdf "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_s_pdf "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             24)
-                install_drawio "/home/docker" "/home/docker/mysql_redis_php/docker-compose.yml"
+                install_drawio "/home/docker" "/home/docker/docker-compose-mysql_redis_php.yml"
                 ;;
             0)
                 break  # 跳出循环，退出菜单
@@ -3796,15 +3862,14 @@ install_python() {
     NC="\033[0m"
 
     # 系统检测
-    OS=$(cat /etc/os-release | grep -o -E "Debian|Ubuntu|CentOS" | head -n 1)
+    OS=$(grep -oP '(?<=^ID=).*' /etc/os-release | tr -d '"')
 
-    if [[ $OS == "Debian" || $OS == "Ubuntu" || $OS == "CentOS" ]]; then
+    if [[ $OS == "debian" || $OS == "ubuntu" || $OS == "centos" || $OS == "alpine" ]]; then
         echo -e "检测到你的系统是 ${YELLOW}${OS}${NC}"
     else
         echo -e "${RED}很抱歉，你的系统不受支持！${NC}"
         exit 1
     fi
-
     # 检测安装Python3的版本
     VERSION=$(python3 -V 2>&1 | awk '{print $2}')
 
@@ -3816,12 +3881,16 @@ install_python() {
         echo -e "${YELLOW}你的Python3版本是${NC}${RED}${VERSION}${NC}，${YELLOW}最新版本是${NC}${RED}${PY_VERSION}${NC}"
         read -p "是否确认升级最新版Python3？默认不升级 [y/N]: " CONFIRM
         if [[ $CONFIRM == "y" ]]; then
-            if [[ $OS == "CentOS" ]]; then
-                echo ""
-                rm-rf /usr/local/python3* >/dev/null 2>&1
+            if [[ $OS == "centos" ]]; then
+                echo "正在卸载旧版本的Python3..."
+                rm -rf /usr/local/python3* >/dev/null 2>&1
+            elif [[ $OS == "alpine" ]]; then
+                echo "正在卸载旧版本的Python3..."
+                apk del python3
             else
+                echo "正在卸载旧版本的Python3..."
                 apt --purge remove python3 python3-pip -y
-                rm-rf /usr/local/python3*
+                rm -rf /usr/local/python3*
             fi
         else
             echo -e "${YELLOW}已取消升级Python3${NC}"
@@ -3839,11 +3908,17 @@ install_python() {
     fi
 
     # 安装相关依赖
-    if [[ $OS == "CentOS" ]]; then
+    if [[ $OS == "centos" ]]; then
+        echo "正在为 CentOS 安装依赖..."
         yum update
         yum groupinstall -y "development tools"
         yum install wget openssl-devel bzip2-devel libffi-devel zlib-devel -y
+    elif [[ $OS == "alpine" ]]; then
+        echo "正在为 Alpine Linux 安装依赖..."
+        apk update
+        apk add --no-cache gcc musl-dev openssl-dev libffi-dev zlib-dev make readline-dev ncurses-dev sqlite-dev tk-dev gdbm-dev libc-dev bzip2-dev xz-dev
     else
+        echo "正在为 Debian/Ubuntu 安装依赖..."
         apt update
         apt install wget build-essential libreadline-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev -y
     fi
@@ -5017,44 +5092,7 @@ scheduled_tasks() {
     done
 }
 
-# 留言板
-message_board() {
-    clear
-    install sshpass
-
-    remote_ip="66.42.61.110"
-    remote_user="liaotian123"
-    remote_file="/home/liaotian123/liaotian.txt"
-    password="YYDS"  # 替换为您的密码
-
-    clear
-    echo "留言板"
-    echo "------------------------"
-    # 显示已有的留言内容
-    sshpass -p "${password}" ssh -o StrictHostKeyChecking=no "${remote_user}@${remote_ip}" "cat '${remote_file}'"
-    echo ""
-    echo "------------------------"
-
-    # 判断是否要留言
-    read -p "是否要留言？(y/n): " leave_message
-
-    if [ "$leave_message" == "y" ] || [ "$leave_message" == "Y" ]; then
-        # 输入新的留言内容
-        read -p "输入你的昵称: " nicheng
-        read -p "输入你的聊天内容: " neirong
-
-        # 添加新留言到远程文件
-        sshpass -p "${password}" ssh -o StrictHostKeyChecking=no "${remote_user}@${remote_ip}" "echo -e '${nicheng}: ${neirong}' >> '${remote_file}'"
-        echo "已添加留言: "
-        echo "${nicheng}: ${neirong}"
-        echo ""
-    else
-        echo "您选择了不留言。"
-    fi
-
-    echo "留言板操作完成。"
-}
-
+# 多后台任务
 tmux_run() {
     # Check if the session already exists
     tmux has-session -t $SESSION_NAME 2>/dev/null
@@ -5203,8 +5241,6 @@ system_tool() {
         echo "19. 切换系统更新源"
         echo -e "20. 定时任务管理 \033[33mNEW\033[0m"
         echo "------------------------"
-        echo "21. 留言板"
-        echo "------------------------"
         echo "99. 重启服务器"
         echo "------------------------"
         echo "0. 返回主菜单"
@@ -5288,9 +5324,6 @@ system_tool() {
             20)
                 scheduled_tasks
                 ;;
-            21)
-                message_board
-                ;;
             99)
                 clear
                 echo "正在重启服务器，即将断开SSH连接"
@@ -5314,20 +5347,22 @@ while true; do
     echo "|_  | |  |    | |\ | "
     echo " _| |_|  |___ | | \| "
     echo "                                "
-    echo -e "\033[96m solin一键脚本工具 v2.0.0 （支持Ubuntu/Debian/CentOS系统）\033[0m"
+    echo -e "\033[96m solin一键脚本工具 v1.0.0 （支持Ubuntu/Debian/CentOS/Alpine系统）\033[0m"
     echo -e "\033[96m-输入\033[93ms\033[96m可快速启动此脚本-\033[0m"
     echo "------------------------"
     echo "1. 系统信息查询"
     echo "2. 系统更新"
     echo "3. 系统清理"
     echo "4. 常用工具"
-    echo "5. Docker管理器 ▶ "   
-    echo "6. 测试脚本合集 ▶ "  
-    echo "7. 甲骨文云脚本合集 ▶ "
-    echo -e "\033[33m8. LDNMP建站-Nginx ▶ \033[0m"
-    echo -e "\033[33m9. LDNMP建站-NginxProxyManager ▶ \033[0m"	
-    echo "10. 我的工作区 ▶ "
-    echo "11. 系统工具 ▶ "    
+    echo "5. BBR管理 ▶"
+    echo "6. Docker管理器 ▶ "   
+    echo "7. 测试脚本合集 ▶ "  
+    echo "8. 甲骨文云脚本合集 ▶ "
+    echo "9. 谷歌云脚本合集 ▶ "
+    echo -e "\033[33m10. LDNMP建站-Nginx ▶ \033[0m"
+    echo -e "\033[33m11. LDNMP建站-NginxProxyManager ▶ \033[0m"	
+    echo "12. 我的工作区 ▶ "
+    echo "13. 系统工具 ▶ "    
     echo "-----------------------"
     echo "00. 脚本更新"
     echo "------------------------"
@@ -5350,31 +5385,38 @@ while true; do
         4)
             clear
             common_tool
-            ;;
+            ;;        
         5)
             clear
-            docker_manage 
+            bbr_script
             ;;
         6)
             clear
-            test_script
+            docker_manage 
             ;;
         7)
             clear
-            oracle_script 
+            test_script
             ;;
         8)
             clear
-            install_ldnmp 
+            oracle_script 
             ;;
         9)
-            panel_tools
+            gcp_script
             ;;
         10)
             clear
+            install_ldnmp 
+            ;;
+        11)
+            panel_tools
+            ;;
+        12)
+            clear
             work_area
             ;; 
-        11)            
+        13)            
             clear
             system_tool
             ;; 
