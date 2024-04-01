@@ -3328,7 +3328,7 @@ install_portainer() {
 }
 
 # 邮件服务程序
-install_Post--;/e() {
+install_Poste() {
     if docker inspect mailserver &>/dev/null; then
 
         clear
