@@ -91,29 +91,25 @@ convert_unit() {
     local -n value_ref=$1
     local -n unit_ref=$2
 
-    # 如果值大于 1 GB
-    if ((value_ref >= 1024**3)); then
+    # 将字节数转换为浮点数
+    local bytes=$(printf "%f" "$value_ref")
+
+    # 如果值大于等于 1 GB
+    if (($(printf "%f" "$bytes >= 1073741824"))); then
         unit_ref="GB"
-        local gb=$((value_ref / 1024**3))
-        local remainder=$((value_ref % 1024**3))
-        local decimal=$((remainder / (1024**2 / 10)))
-        value_ref="${gb}.${decimal}"
-    # 如果值大于 1 MB
-    elif ((value_ref >= 1024**2)); then
+        value_ref=$(printf "%.1f" $(echo "$bytes/1073741824" | awk '{printf "%.1f", $0}'))
+    # 如果值大于等于 1 MB
+    elif (($(printf "%f" "$bytes >= 1048576"))); then
         unit_ref="MB"
-        local mb=$((value_ref / 1024**2))
-        local remainder=$((value_ref % 1024**2))
-        local decimal=$((remainder / (1024 / 10)))
-        value_ref="${mb}.${decimal}"
-    # 如果值大于 1 KB
-    elif ((value_ref >= 1024)); then
+        value_ref=$(printf "%.1f" $(echo "$bytes/1048576" | awk '{printf "%.1f", $0}'))
+    # 如果值大于等于 1 KB
+    elif (($(printf "%f" "$bytes >= 1024"))); then
         unit_ref="KB"
-        local kb=$((value_ref / 1024))
-        local remainder=$((value_ref % 1024))
-        local decimal=$((remainder / (10)))
-        value_ref="${kb}.${decimal}"
+        value_ref=$(printf "%.1f" $(echo "$bytes/1024" | awk '{printf "%.1f", $0}'))
+    else
+        unit_ref="Bytes"
+        value_ref=$(printf "%.1f" "$bytes")
     fi
-    # 如果值小于 1 KB，则保持 Bytes 单位，不需要转换
 }
 
 # 函数: 显示系统信息
