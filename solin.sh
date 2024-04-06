@@ -71,7 +71,7 @@ ip_address() {
 
 # 函数: 获取网络接收和发送流量
 network_traffic() {
-    # 使用 awk 从 /proc/net/dev 读取每个接口的接收和发送字节数，并进行累加
+    # 使用 awk 从 /proc/net/dev 读取每个接口的接收和发送字节数,并进行累加
     read rx_total tx_total < <(awk '{if ($1 ~ /^[a-zA-Z0-9]+:$/) {rx+=$2; tx+=$10}} END {print rx, tx}' /proc/net/dev)
 
     # 初始化单位为 Bytes
@@ -79,36 +79,40 @@ network_traffic() {
     tx_units="Bytes"
 
     # 调用 convert_unit 函数来转换单位
-    convert_unit rx_total rx_units
-    convert_unit tx_total tx_units
+    rx_total=$(convert_unit "$rx_total" rx_units)
+    tx_total=$(convert_unit "$tx_total" tx_units)
 
     # 构造输出字符串
-    network_output="总接收: $rx_total $rx_units  总发送: $tx_total $tx_units"
+    network_output="总接收: $rx_total $rx_units\n总发送: $tx_total $tx_units"
 }
 
 # 函数: 单位转换
 convert_unit() {
-    local -n value_ref=$1
+    local value=$1
     local -n unit_ref=$2
 
     # 将字节数转换为浮点数
-    local bytes=$(printf "%f" "$value_ref")
+    local bytes=$(printf "%f" "$value")
 
+    # 如果值大于等于 1 TB
+    if [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1000000000000) ? "true" : "false" }')" = "true" ]; then
+        unit_ref="TB"
+        echo "$(printf "%.2f" $(echo "$bytes/1000000000000" | awk '{printf "%.2f", $0}'))"
     # 如果值大于等于 1 GB
-    if [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1000000000) ? "true" : "false" }')" = "true" ]; then
+    elif [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1000000000) ? "true" : "false" }')" = "true" ]; then
         unit_ref="GB"
-        value_ref=$(printf "%.1f" $(echo "$bytes/1000000000" | awk '{printf "%.1f", $0}'))
+        echo "$(printf "%.2f" $(echo "$bytes/1000000000" | awk '{printf "%.2f", $0}'))"
     # 如果值大于等于 1 MB
     elif [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1000000) ? "true" : "false" }')" = "true" ]; then
         unit_ref="MB"
-        value_ref=$(printf "%.1f" $(echo "$bytes/1000000" | awk '{printf "%.1f", $0}'))
+        echo "$(printf "%.2f" $(echo "$bytes/1000000" | awk '{printf "%.2f", $0}'))"
     # 如果值大于等于 1 KB
     elif [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1000) ? "true" : "false" }')" = "true" ]; then
         unit_ref="KB"
-        value_ref=$(printf "%.1f" $(echo "$bytes/1000" | awk '{printf "%.1f", $0}'))
+        echo "$(printf "%.2f" $(echo "$bytes/1000" | awk '{printf "%.2f", $0}'))"
     else
         unit_ref="Bytes"
-        value_ref=$(printf "%.1f" "$bytes")
+        echo "$value"
     fi
 }
 
