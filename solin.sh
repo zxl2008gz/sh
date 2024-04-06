@@ -95,17 +95,17 @@ convert_unit() {
     local bytes=$(printf "%f" "$value_ref")
 
     # 如果值大于等于 1 GB
-    if [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1073741824) ? "true" : "false" }')" = "true" ]; then
+    if [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1000000000) ? "true" : "false" }')" = "true" ]; then
         unit_ref="GB"
-        value_ref=$(printf "%.1f" $(echo "$bytes/1073741824" | awk '{printf "%.1f", $0}'))
+        value_ref=$(printf "%.1f" $(echo "$bytes/1000000000" | awk '{printf "%.1f", $0}'))
     # 如果值大于等于 1 MB
-    elif [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1048576) ? "true" : "false" }')" = "true" ]; then
+    elif [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1000000) ? "true" : "false" }')" = "true" ]; then
         unit_ref="MB"
-        value_ref=$(printf "%.1f" $(echo "$bytes/1048576" | awk '{printf "%.1f", $0}'))
+        value_ref=$(printf "%.1f" $(echo "$bytes/1000000" | awk '{printf "%.1f", $0}'))
     # 如果值大于等于 1 KB
-    elif [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1024) ? "true" : "false" }')" = "true" ]; then
+    elif [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1000) ? "true" : "false" }')" = "true" ]; then
         unit_ref="KB"
-        value_ref=$(printf "%.1f" $(echo "$bytes/1024" | awk '{printf "%.1f", $0}'))
+        value_ref=$(printf "%.1f" $(echo "$bytes/1000" | awk '{printf "%.1f", $0}'))
     else
         unit_ref="Bytes"
         value_ref=$(printf "%.1f" "$bytes")
