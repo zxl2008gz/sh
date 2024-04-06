@@ -127,7 +127,7 @@ CPU占用: ${cpu_usage_percent}%
 虚拟内存: $swap_info
 硬盘占用: $disk_info
 ------------------------
-$network_output
+$$output
 ------------------------
 网络拥堵算法: $congestion_algorithm $queue_algorithm
 ------------------------
