@@ -95,15 +95,15 @@ convert_unit() {
     local bytes=$(printf "%f" "$value_ref")
 
     # 如果值大于等于 1 GB
-    if (($(printf "%f" "$bytes >= 1073741824"))); then
+    if [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1073741824) ? "true" : "false" }')" = "true" ]; then
         unit_ref="GB"
         value_ref=$(printf "%.1f" $(echo "$bytes/1073741824" | awk '{printf "%.1f", $0}'))
     # 如果值大于等于 1 MB
-    elif (($(printf "%f" "$bytes >= 1048576"))); then
+    elif [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1048576) ? "true" : "false" }')" = "true" ]; then
         unit_ref="MB"
         value_ref=$(printf "%.1f" $(echo "$bytes/1048576" | awk '{printf "%.1f", $0}'))
     # 如果值大于等于 1 KB
-    elif (($(printf "%f" "$bytes >= 1024"))); then
+    elif [ "$(awk -v bytes="$bytes" 'BEGIN { print (bytes >= 1024) ? "true" : "false" }')" = "true" ]; then
         unit_ref="KB"
         value_ref=$(printf "%.1f" $(echo "$bytes/1024" | awk '{printf "%.1f", $0}'))
     else
