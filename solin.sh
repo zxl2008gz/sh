@@ -1415,21 +1415,21 @@ default_server_ssl() {
 # nginx 配置
 nginx_config() {
    # 创建必要的目录和文件
-    mkdir -p /home/docker && cd /home/docker && mkdir -p html web/certs web/conf.d web/log/nginx && touch web/docker-compose-nginx.yml
+    mkdir -p /home/docker && cd /home/docker && mkdir -p html web/certs web/conf.d web/log/nginx && touch docker-compose-nginx.yml
     wget -O /home/docker/web/nginx.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/nginx.conf
     wget -O /home/docker/web/conf.d/default.conf https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/default.conf
     default_server_ssl
     docker rm -f nginx >/dev/null 2>&1
     docker rmi nginx >/dev/null 2>&1
 
-    wget -O /home/docker/web/docker-compose-nginx.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/docker-compose-nginx.yml
+    wget -O /home/docker/docker-compose-nginx.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/docker-compose-nginx.yml
     
 }
 
 # 安装 nginx
 install_nginx() {
     nginx_config
-    cd /home/docker/web && docker-compose -f docker-compose-nginx.yml up -d
+    cd /home/docker && docker-compose -f docker-compose-nginx.yml up -d
 }
 
 # 创建必要的目录和文件
@@ -3820,7 +3820,7 @@ install_drawio() {
 panel_tools() {
     while true; do
         clear
-        echo "▶ 安装LDNMP环境-NginxProxyManager"
+        echo "▶ 11.安装LDNMP环境-NginxProxyManager"
         echo "------------------------"
         echo "1. NginxProxyManager可视化面板          2. mysql-redis-php容器"        
         echo "3. 安装LobeChat聊天网站                 4. 安装GeminiPro聊天网站"
