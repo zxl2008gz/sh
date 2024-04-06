@@ -2462,7 +2462,7 @@ install_ldnmp() {
 
     while true; do
         clear
-        echo -e "\033[33m5. LDNMP建站 ▶ \033[0m"
+        echo -e "\033[33m10. LDNMP建站 ▶ \033[0m"
         echo "------------------------"
         echo "1. 安装LDNMP环境-Nginx"
         echo "------------------------"				
