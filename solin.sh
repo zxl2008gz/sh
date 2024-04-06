@@ -1472,13 +1472,13 @@ create_ldnmp_file() {
     nginx_config
     create_mysql_redis_php_file
     # 输出一个空行到目标文件
-    echo "" >> /home/docker/web/docker-compose-nginx.yml
+    echo "" >> /home/docker/docker-compose-nginx.yml
 
     # 追加经过筛选的内容（除去第一行和包含'version:'的行）
-    sed -n '/services:/,$p' /home/docker/docker-compose-mysql_redis_php.yml | sed '1d' | sed '/version:/d' >> /home/docker/web/docker-compose-nginx.yml
+    sed -n '/services:/,$p' /home/docker/docker-compose-mysql_redis_php.yml | sed '1d' | sed '/version:/d' >> /home/docker/docker-compose-nginx.yml
 
     # 复制修改后的文件，并重命名
-    cp /home/docker/web/docker-compose-nginx.yml /home/docker/docker-compose.yml
+    cp /home/docker/docker-compose-nginx.yml /home/docker/docker-compose.yml
     cd /home/docker && docker-compose up -d
 }
 
