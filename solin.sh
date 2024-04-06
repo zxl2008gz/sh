@@ -69,6 +69,23 @@ ip_address() {
     ipv6_address=$(curl -s --max-time 1 ipv6.ip.sb)
 }
 
+# 函数: 获取网络接收和发送流量
+network_traffic() {
+    # 使用 awk 从 /proc/net/dev 读取每个接口的接收和发送字节数，并进行累加
+    read rx_total tx_total < <(awk '{if ($1 ~ /^[a-zA-Z0-9]+:$/) {rx+=$2; tx+=$10}} END {print rx, tx}' /proc/net/dev)
+
+    # 初始化单位为 Bytes
+    rx_units="Bytes"
+    tx_units="Bytes"
+
+    # 调用 convert_unit 函数来转换单位
+    convert_unit rx_total rx_units
+    convert_unit tx_total tx_units
+
+    # 构造输出字符串
+    network_output="总接收: $rx_total $rx_units  总发送: $tx_total $tx_units"
+}
+
 # 函数: 单位转换
 convert_unit() {
     local -n value_ref=$1
