@@ -2,7 +2,7 @@
 
 # 脚本参数：传递域名作为第一个参数
 domain="$1"
-env_path="/home/docker/html/$domain/dujiaoka/.env"
+env_path="$2"
 backup_path="$env_path.bak"
 logfile="/var/log/env_monitor.log"
 
