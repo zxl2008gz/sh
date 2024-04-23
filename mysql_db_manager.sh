@@ -407,15 +407,17 @@ manager_mysql() {
 case "$1" in
     create)
         container_name1="$2"
+	dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
         credentials=($(get_db_credentials "$container_name_mysql"))
-        create_database_and_grant "$container_name_mysql" "$3" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
+        create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
         ;;
     delete)
         container_name1="$2"
+	dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
         credentials=($(get_db_credentials "$container_name_mysql"))
-        delete_database "$container_name_mysql" "$3" "${credentials[2]}" "${credentials[0]}"
+        delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
         ;;
     manage)
         manager_mysql "$2"
