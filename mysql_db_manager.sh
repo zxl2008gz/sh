@@ -13,6 +13,7 @@ break_end() {
 get_db_container_name() {
     local db_image_keyword="$1"
     docker ps --format "{{.Names}}\t{{.Image}}" | grep "$db_image_keyword" | awk '{print $1}'
+    
 }
 
 # 选择数据库容器
