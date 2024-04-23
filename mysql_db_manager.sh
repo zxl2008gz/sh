@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# 函数：退出
+break_end() {
+	echo -e "\033[0;32m操作完成\033[0m"
+	echo "按任意键继续..."
+	read -n 1 -s -r -p ""
+	echo
+	clear
+}
+
 # 获取数据库容器的名称
 get_db_container_name() {
     local db_image_keyword="$1"
