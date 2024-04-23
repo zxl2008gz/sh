@@ -19,7 +19,6 @@ get_db_container_name() {
 get_config_value() {
     local var_name="$1"
     local container_name="$2"
-    echo "正在获取 $var_name 从容器 $container_name ..." >&2
     docker exec "$container_name" /bin/sh -c "echo \${$var_name}"
 }
 
@@ -33,9 +32,7 @@ get_db_credentials() {
     credentials[password]=$(get_config_value 'MYSQL_PASSWORD' "$container_name")
     credentials[root_password]=$(get_config_value 'MYSQL_ROOT_PASSWORD' "$container_name")
 
-    # 返回关联数组
-    # 此处修改为将数组作为全局变量处理
-    echo "${credentials[user]} ${credentials[password]} ${credentials[root_password]}"
+    echo "User: ${credentials[user]}, Password: ${credentials[password]}, Root Password: ${credentials[root_password]}"
 }
 
 # 检查数据库是否存在
