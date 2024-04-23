@@ -182,7 +182,7 @@ import_database() {
 mysql_display() {
     local container_name1="$1"
     local credentials1="$2"
-    local output="可用的数据库容器:\n---------------------------------------------\n"
+    local output="可用的数据库容器:\n"
     output+=$(printf "%-30s %-20s\n" "数据库列表" "容器名称")
     output+="---------------------------------------------\n"
 
