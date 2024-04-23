@@ -183,17 +183,19 @@ mysql_display() {
     local container_name1="$1"
     local credentials1="$2"
     local output="可用的数据库容器:\n---------------------------------------------\n"
-    output+="%-30s %-20s\n" "数据库列表" "容器名称"
+    output+=$(printf "%-30s %-20s\n" "数据库列表" "容器名称")
     output+="---------------------------------------------\n"
 
     # 获取并处理数据库列表
-    local list=$(docker ps --format "{{.Names}}\t{{.Image}}" | grep "$container_name1" | awk '{print $1}')
+    local list
+    list=$(docker ps --format "{{.Names}}\t{{.Image}}" | grep "$container_name1" | awk '{print $1}')
     if [[ -z "$list" ]]; then
         return 1 # 如果列表为空，返回错误码
     fi
 
     for container_name in $list; do
-        local databases=$(docker exec -e MYSQL_PWD="$credentials1" "$container_name" mysql -u root -e 'SHOW DATABASES;' | sed '1d')
+        local databases
+        databases=$(docker exec -e MYSQL_PWD="$credentials1" "$container_name" mysql -u root -e 'SHOW DATABASES;' | sed '1d')
         if [[ -z "$databases" ]]; then
             output+="没有找到数据库。\n"
         else
@@ -205,7 +207,6 @@ mysql_display() {
     done
     echo -e "$output"
 }
-
 
 # 函数：通过复制表来重命名数据库
 rename_database() {
