@@ -9,33 +9,10 @@ break_end() {
 	clear
 }
 
-# 获取数据库容器的名称列表
-get_db_container_names() {
+# 获取数据库容器的名称
+get_db_container_name() {
     local db_image_keyword="$1"
     docker ps --format "{{.Names}}\t{{.Image}}" | grep "$db_image_keyword" | awk '{print $1}'
-}
-
-# 选择数据库容器
-select_db_container() {
-    local db_image_keyword="$1"
-    local container_names=($(get_db_container_names "$db_image_keyword"))
-    
-    if [ "${#container_names[@]}" -eq 0 ]; then
-        echo "没有找到与 '$db_image_keyword' 匹配的运行容器。"
-        exit 1
-    elif [ "${#container_names[@]}" -eq 1 ]; then
-        echo "找到一个匹配容器：${container_names[0]}"
-        echo "${container_names[0]}"
-    else
-        echo "找到多个匹配容器，请选择："
-        local index=1
-        for container in "${container_names[@]}"; do
-            echo "$index) $container"
-            ((index++))
-        done
-        read -p "请输入选择（1-${#container_names[@]}）: " choice
-        echo "${container_names[$choice-1]}"
-    fi
 }
 
 # 获取数据库配置值
@@ -181,32 +158,25 @@ import_database() {
 # 数据库显示列表
 mysql_display() {
     local container_name1="$1"
-    local root_password="$2"  # 修改变量名称以反映它是 root 密码
-    local output="可用的数据库容器:\n"
-    output+=$(printf "%-30s %-20s\n" "数据库列表" "容器名称")
-    output+="---------------------------------------------\n"
+    local credentials1="$2"
+    echo "可用的数据库容器:"
+    echo "---------------------------------------------"
+    printf "%-30s %-20s\n" "数据库列表" "容器名称"
+    echo "---------------------------------------------"
 
-    # 获取并处理数据库列表
-    local list
-    list=$(docker ps --format "{{.Names}}\t{{.Image}}" | grep "$container_name1" | awk '{print $1}')
-    if [[ -z "$list" ]]; then
-        echo -e "没有找到与 '$container_name1' 匹配的运行容器。"
-        return 1 # 如果列表为空，返回错误码
-    fi
+    # 列出所有运行的容器以及对应的镜像名称
 
-    for container_name in $list; do
-        local databases
-        databases=$(docker exec -e MYSQL_PWD="$root_password" "$container_name" mysql -u root -e 'SHOW DATABASES;' | sed '1d')
-        if [[ -z "$databases" ]]; then
-            output+="没有找到数据库。\n"
-        else
-            for db in $databases; do
-                output+=$(printf "%-25s %-20s\n" "$db" "$container_name")
+    docker ps --format "{{.Names}}\t{{.Image}}" | grep "$container_name1" | while read -r container_name image_name; do
+        databases=$(docker exec -e MYSQL_PWD="$credentials1" "$container_name" mysql -u root -e 'SHOW DATABASES;' | sed '1d')
+        if [ -n "$databases" ]; then
+            echo "$databases" | while read db; do
+                printf "%-25s %-20s\n" "$db" "$container_name"
             done
+        else
+            echo "没有找到数据库。"
         fi
+        echo "---------------------------------------------"
     done
-    output+="---------------------------------------------\n"
-    echo -e "$output"
 }
 
 # 函数：通过复制表来重命名数据库
@@ -389,15 +359,11 @@ modif_db(){
 # 主菜单系统
 manager_mysql() {
     container_name1="$1"
-    container_name_mysql=$(select_db_container "$container_name1")
+    container_name_mysql=$(get_db_container_name "$container_name1")
     credentials=($(get_db_credentials "$container_name_mysql"))
-    local root_password="${credentials[2]}"  # 从凭据数组中获取 root
     while true; do
         clear
-        if ! mysql_display "$container_name_mysql" "$root_password"; then  # 传递正确的 root 密码
-            echo "没有找到任何数据库，或者没有运行的数据库容器。"
-            break
-        fi
+        mysql_display "$container_name1" "${credentials[2]}"
         echo "请选择您要执行的操作："
         echo "1. 创建数据库"
         echo "2. 删除数据库"
@@ -442,14 +408,14 @@ case "$1" in
     create)
         container_name1="$2"
 	dbname="$3"
-        container_name_mysql=$(select_db_container "$container_name1")
+        container_name_mysql=$(get_db_container_name "$container_name1")
         credentials=($(get_db_credentials "$container_name_mysql"))
         create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
         ;;
     delete)
         container_name1="$2"
 	dbname="$3"
-        container_name_mysql=$(select_db_container "$container_name1")
+        container_name_mysql=$(get_db_container_name "$container_name1")
         credentials=($(get_db_credentials "$container_name_mysql"))
         delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
         ;;
