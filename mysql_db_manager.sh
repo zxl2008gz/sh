@@ -182,7 +182,7 @@ import_database() {
 # 数据库显示列表
 mysql_display() {
     local container_name1="$1"
-    local credentials1="$2"
+    local root_password="$2"  # 修改变量名称以反映它是 root 密码
     local output="可用的数据库容器:\n"
     output+=$(printf "%-30s %-20s\n" "数据库列表" "容器名称")
     output+="---------------------------------------------\n"
@@ -197,7 +197,7 @@ mysql_display() {
 
     for container_name in $list; do
         local databases
-        databases=$(docker exec -e MYSQL_PWD="$credentials1" "$container_name" mysql -u root -e 'SHOW DATABASES;' | sed '1d')
+        databases=$(docker exec -e MYSQL_PWD="$root_password" "$container_name" mysql -u root -e 'SHOW DATABASES;' | sed '1d')
         if [[ -z "$databases" ]]; then
             output+="没有找到数据库。\n"
         else
@@ -392,9 +392,10 @@ manager_mysql() {
     container_name1="$1"
     container_name_mysql=$(select_db_container "$container_name1")
     credentials=($(get_db_credentials "$container_name_mysql"))
+    local root_password="${credentials[2]}"  # 从凭据数组中获取 root
     while true; do
         clear
-        if ! mysql_display "$container_name_mysql" "${credentials[2]}"; then
+        if ! mysql_display "$container_name_mysql" "$root_password"; then  # 传递正确的 root 密码
             echo "没有找到任何数据库，或者没有运行的数据库容器。"
             break
         fi
