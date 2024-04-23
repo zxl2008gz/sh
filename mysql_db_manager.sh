@@ -18,7 +18,7 @@ get_db_container_name() {
 # 选择数据库容器
 select_db_container() {
     local db_image_keyword="$1"
-    local container_names=($(get_db_container_names "$db_image_keyword"))
+    local container_names=($(get_db_container_name "$db_image_keyword"))
     
     if [ "${#container_names[@]}" -eq 0 ]; then
         echo "没有找到与 '$db_image_keyword' 匹配的运行容器。"
