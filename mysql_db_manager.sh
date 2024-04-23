@@ -389,7 +389,7 @@ modif_db(){
 # 主菜单系统
 manager_mysql() {
     container_name1="$1"
-    container_name_mysql=$(select_db_container "$container_name1")
+    container_name_mysql=$(get_db_container_name "$container_name1")
     credentials=($(get_db_credentials "$container_name_mysql"))
     while true; do
         clear
