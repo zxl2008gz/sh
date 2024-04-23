@@ -392,14 +392,10 @@ manager_mysql() {
     credentials=($(get_db_credentials "$container_name_mysql"))
     while true; do
         clear
-        # 显示数据库容器列表，并处理可能的空列表情况
-	databases=$(mysql_display "$container_name1" "${credentials[2]}")
-	if [[ -z "$databases" ]]; then
-		echo "没有找到任何数据库，或者没有运行的数据库容器。"
-		break
-	else
-		echo "$databases"
-	fi
+        if ! mysql_display "$container_name1" "${credentials[2]}"; then
+            echo "没有找到任何数据库，或者没有运行的数据库容器。"
+            break
+        fi
         echo "请选择您要执行的操作："
         echo "1. 创建数据库"
         echo "2. 删除数据库"
