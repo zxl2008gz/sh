@@ -2,11 +2,11 @@
 
 # 函数：退出
 break_end() {
-    echo -e "\033[0;32m操作完成\033[0m"
-    echo "按任意键继续..."
-    read -n 1 -s -r -p ""
-    echo
-    clear
+	echo -e "\033[0;32m操作完成\033[0m"
+	echo "按任意键继续..."
+	read -n 1 -s -r -p ""
+	echo
+	clear
 }
 
 # 获取数据库容器的名称
@@ -24,22 +24,23 @@ get_config_value() {
 
 # 函数：获取数据库凭据
 get_db_credentials() {
-    local container_name="$1"
+    local container_name=$1
     declare -A credentials
 
-    # 直接从容器获取环境变量的值
-    credentials[user]=$(docker exec "$container_name" env | grep MYSQL_USER | cut -d'=' -f2)
-    credentials[password]=$(docker exec "$container_name" env | grep MYSQL_PASSWORD | cut -d'=' -f2)
-    credentials[root_password]=$(docker exec "$container_name" env | grep MYSQL_ROOT_PASSWORD | cut -d'=' -f2)
+    # 使用内置的 get_config_value 函数来获取环境变量
+    credentials[user]=$(get_config_value 'MYSQL_USER' "$container_name")
+    credentials[password]=$(get_config_value 'MYSQL_PASSWORD' "$container_name")
+    credentials[root_password]=$(get_config_value 'MYSQL_ROOT_PASSWORD' "$container_name")
 
-    echo "User: ${credentials[user]}, Password: ${credentials[password]}, Root Password: ${credentials[root_password]}"
+    # 返回关联数组
+    echo "${credentials[user]} ${credentials[password]} ${credentials[root_password]}"
 }
 
 # 检查数据库是否存在
 database_exists() {
     local container_name=$1
     local dbname=$2
-    local dbroot_password=$(get_db_credentials "$container_name" | tail -n 1)
+    local dbroot_password=$3
 
     local check_command="SHOW DATABASES LIKE '$dbname';"
     if docker exec -e MYSQL_PWD="$dbroot_password" "$container_name" mysql -u root -e "$check_command" | grep -q "$dbname"; then
@@ -52,10 +53,11 @@ database_exists() {
 # 查询数据库并列出所有表
 query_database() {
     local container_name=$1
+    local dbroot_password=$2
     local dbname=$3
-    local dbroot_password=$(get_db_credentials "$container_name" | tail -n 1)
 
     local query="SHOW TABLES"
+
     if ! output=$(docker exec -e MYSQL_PWD="$dbroot_password" "$container_name" mysql -u root -e "$query" "$dbname" 2>&1); then
         echo "Error: Failed to query database. MySQL said: $output"
         return 1
@@ -70,7 +72,7 @@ create_database_and_grant() {
     local dbname=$2
     local dbuser=$3
     local dbuser_password=$4
-    local dbroot_password=$(get_db_credentials "$container_name" | tail -n 1)
+    local dbroot_password=$5
 
     # 检查数据库是否存在
     if database_exists "$container_name" "$dbname" "$dbroot_password"; then
@@ -405,13 +407,14 @@ manager_mysql() {
 case "$1" in
     create)
         container_name1="$2"
-        dbname="$3"
+	dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
-        create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" $(get_db_credentials "$container_name_mysql" | tail -n 1)
+        credentials=($(get_db_credentials "$container_name_mysql"))
+        create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
         ;;
     delete)
         container_name1="$2"
-        dbname="$3"
+	dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
         credentials=($(get_db_credentials "$container_name_mysql"))
         delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
