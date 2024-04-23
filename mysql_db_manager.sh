@@ -2,14 +2,14 @@
 
 # 函数：退出
 break_end() {
-	echo -e "\033[0;32m操作完成\033[0m"
-	echo "按任意键继续..."
-	read -n 1 -s -r -p ""
-	echo
-	clear
+    echo -e "\033[0;32m操作完成\033[0m"
+    echo "按任意键继续..."
+    read -n 1 -s -r -p ""
+    echo
+    clear
 }
 
-# Helper function to safely call commands and capture their output
+# 安全执行命令的函数
 safe_exec() {
     local output
     output=$(eval "$@" 2>&1)
@@ -17,7 +17,7 @@ safe_exec() {
     if [ $status -ne 0 ]; then
         echo "Error running command: $@" >&2
         echo "Output: $output" >&2
-        exit $status
+        return $status
     fi
     echo "$output"
 }
@@ -38,13 +38,10 @@ get_config_value() {
 # 函数：获取数据库凭据
 get_db_credentials() {
     local container_name=$1
-    declare -A credentials
-
-    credentials[user]=$(get_config_value 'MYSQL_USER' "$container_name")
-    credentials[password]=$(get_config_value 'MYSQL_PASSWORD' "$container_name")
-    credentials[root_password]=$(get_config_value 'MYSQL_ROOT_PASSWORD' "$container_name")
-
-    echo "${credentials[@]}"
+    local user=$(get_config_value 'MYSQL_USER' "$container_name")
+    local password=$(get_config_value 'MYSQL_PASSWORD' "$container_name")
+    local root_password=$(get_config_value 'MYSQL_ROOT_PASSWORD' "$container_name")
+    echo "$user" "$password" "$root_password"
 }
 
 # 检查数据库是否存在
@@ -369,22 +366,17 @@ modif_db(){
 
 # 主菜单系统
 manager_mysql() {
-    container_name1="$1"
-    local container_name_mysql
-    container_name_mysql=$(get_db_container_name "$container_name1")
-    credentials=($(get_db_credentials "$container_name_mysql"))
-    if [ -z "$container_name_mysql" ]; then
+    local container_name_keyword="$1"
+    local container_name=$(get_db_container_name "$container_name_keyword")
+    if [ -z "$container_name" ]; then
         echo "找不到对应的数据库容器。"
-        exit 1
+        return 1
     fi
-    local credentials
-    IFS=' ' read -r -a credentials <<< $(get_db_credentials "$container_name_mysql")
+    IFS=' ' read -r user password root_password <<< $(get_db_credentials "$container_name")
+    local credentials=($user $password $root_password)
     while true; do
         clear
-        if ! mysql_display "${credentials[2]}"; then
-            echo "没有找到任何数据库，或者没有运行的数据库容器。"
-            break
-        fi
+        mysql_display "$container_name" "${credentials[2]}"
         echo "请选择您要执行的操作："
         echo "1. 创建数据库"
         echo "2. 删除数据库"
