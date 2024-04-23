@@ -9,17 +9,30 @@ break_end() {
 	clear
 }
 
+# Helper function to safely call commands and capture their output
+safe_exec() {
+    local output
+    output=$(eval "$@" 2>&1)
+    local status=$?
+    if [ $status -ne 0 ]; then
+        echo "Error running command: $@" >&2
+        echo "Output: $output" >&2
+        exit $status
+    fi
+    echo "$output"
+}
+
 # 获取数据库容器的名称
 get_db_container_name() {
     local db_image_keyword="$1"
-    docker ps --format "{{.Names}}\t{{.Image}}" | grep "$db_image_keyword" | awk '{print $1}'
+    safe_exec docker ps --format "{{.Names}}\t{{.Image}}" | grep "$db_image_keyword" | awk '{print $1}'
 }
 
 # 获取数据库配置值
 get_config_value() {
     local var_name="$1"
     local container_name="$2"
-    docker exec "$container_name" /bin/sh -c "echo \${$var_name}"
+    safe_exec docker exec "$container_name" /bin/sh -c "echo \${$var_name}"
 }
 
 # 函数：获取数据库凭据
@@ -27,13 +40,11 @@ get_db_credentials() {
     local container_name=$1
     declare -A credentials
 
-    # 使用内置的 get_config_value 函数来获取环境变量
     credentials[user]=$(get_config_value 'MYSQL_USER' "$container_name")
     credentials[password]=$(get_config_value 'MYSQL_PASSWORD' "$container_name")
     credentials[root_password]=$(get_config_value 'MYSQL_ROOT_PASSWORD' "$container_name")
 
-    # 返回关联数组
-    echo "${credentials[user]} ${credentials[password]} ${credentials[root_password]}"
+    echo "${credentials[@]}"
 }
 
 # 检查数据库是否存在
@@ -359,11 +370,21 @@ modif_db(){
 # 主菜单系统
 manager_mysql() {
     container_name1="$1"
+    local container_name_mysql
     container_name_mysql=$(get_db_container_name "$container_name1")
     credentials=($(get_db_credentials "$container_name_mysql"))
+    if [ -z "$container_name_mysql" ]; then
+        echo "找不到对应的数据库容器。"
+        exit 1
+    fi
+    local credentials
+    IFS=' ' read -r -a credentials <<< $(get_db_credentials "$container_name_mysql")
     while true; do
         clear
-        mysql_display "$container_name1" "${credentials[2]}"
+        if ! mysql_display "${credentials[2]}"; then
+            echo "没有找到任何数据库，或者没有运行的数据库容器。"
+            break
+        fi
         echo "请选择您要执行的操作："
         echo "1. 创建数据库"
         echo "2. 删除数据库"
