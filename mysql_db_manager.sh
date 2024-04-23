@@ -397,10 +397,16 @@ manager_mysql() {
 # 主逻辑
 case "$1" in
     create)
-        create_database_and_grant "$2" "$3" "$4" "$5" "$6"
+        container_name1="$2"
+        container_name_mysql=$(get_db_container_name "$container_name1")
+        credentials=($(get_db_credentials "$container_name_mysql"))
+        create_database_and_grant "$container_name_mysql" "$3" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
         ;;
     delete)
-        delete_database "$2" "$3" "$4" "$5"
+        container_name1="$2"
+        container_name_mysql=$(get_db_container_name "$container_name1")
+        credentials=($(get_db_credentials "$container_name_mysql"))
+        delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
         ;;
     manage)
         manager_mysql "$2"
