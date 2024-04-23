@@ -15,6 +15,29 @@ get_db_container_name() {
     docker ps --format "{{.Names}}\t{{.Image}}" | grep "$db_image_keyword" | awk '{print $1}'
 }
 
+# 选择数据库容器
+select_db_container() {
+    local db_image_keyword="$1"
+    local container_names=($(get_db_container_names "$db_image_keyword"))
+    
+    if [ "${#container_names[@]}" -eq 0 ]; then
+        echo "没有找到与 '$db_image_keyword' 匹配的运行容器。"
+        exit 1
+    elif [ "${#container_names[@]}" -eq 1 ]; then
+        echo "找到一个匹配容器：${container_names[0]}"
+        echo "${container_names[0]}"
+    else
+        echo "找到多个匹配容器，请选择："
+        local index=1
+        for container in "${container_names[@]}"; do
+            echo "$index) $container"
+            ((index++))
+        done
+        read -p "请输入选择（1-${#container_names[@]}）: " choice
+        echo "${container_names[$choice-1]}"
+    fi
+}
+
 # 获取数据库配置值
 get_config_value() {
     local var_name="$1"
@@ -359,7 +382,7 @@ modif_db(){
 # 主菜单系统
 manager_mysql() {
     container_name1="$1"
-    container_name_mysql=$(get_db_container_name "$container_name1")
+    container_name_mysql=$(select_db_container "$container_name1")
     credentials=($(get_db_credentials "$container_name_mysql"))
     while true; do
         clear
