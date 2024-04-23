@@ -2,71 +2,38 @@
 
 # 函数：退出
 break_end() {
-    echo -e "\033[0;32m操作完成\033[0m"
-    echo "按任意键继续..."
-    read -n 1 -s -r -p ""
-    echo
-    clear
+	echo -e "\033[0;32m操作完成\033[0m"
+	echo "按任意键继续..."
+	read -n 1 -s -r -p ""
+	echo
+	clear
 }
 
-# 安全执行命令的函数
-safe_exec() {
-    local output
-    output=$(eval "$@" 2>&1)
-    local status=$?
-    if [ $status -ne 0 ]; then
-        echo "Error running command: $@" >&2
-        echo "Output: $output" >&2
-        return $status
-    fi
-    echo "$output"
-}
-
-# 函数：获取数据库容器的名称
+# 获取数据库容器的名称
 get_db_container_name() {
-    local image_name="$1"
-    local name=$(docker ps --filter "ancestor=$image_name" --format "{{.Names}}" | head -n 1)
-    echo "$name"
+    local db_image_keyword="$1"
+    docker ps --format "{{.Names}}\t{{.Image}}" | grep "$db_image_keyword" | awk '{print $1}'
 }
 
 # 获取数据库配置值
 get_config_value() {
     local var_name="$1"
     local container_name="$2"
-    safe_exec docker exec "$container_name" /bin/sh -c "echo \${$var_name}"
+    docker exec "$container_name" /bin/sh -c "echo \${$var_name}"
 }
 
 # 函数：获取数据库凭据
 get_db_credentials() {
     local container_name=$1
-    local user password root_password
+    declare -A credentials
 
-    # 确保传入的是容器名关键词而非整个名称
-    container_name=$(get_db_container_name "$container_name")
-    if [ -z "$container_name" ]; then
-        echo "找不到对应的数据库容器。" >&2
-        return 1
-    fi
+    # 使用内置的 get_config_value 函数来获取环境变量
+    credentials[user]=$(get_config_value 'MYSQL_USER' "$container_name")
+    credentials[password]=$(get_config_value 'MYSQL_PASSWORD' "$container_name")
+    credentials[root_password]=$(get_config_value 'MYSQL_ROOT_PASSWORD' "$container_name")
 
-    user=$(get_config_value 'MYSQL_USER' "$container_name")
-    if [ -z "$user" ]; then
-        echo "无法获取 MYSQL_USER" >&2
-        return 1
-    fi
-
-    password=$(get_config_value 'MYSQL_PASSWORD' "$container_name")
-    if [ -z "$password" ]; then
-        echo "无法获取 MYSQL_PASSWORD" >&2
-        return 1
-    fi
-
-    root_password=$(get_config_value 'MYSQL_ROOT_PASSWORD' "$container_name")
-    if [ -z "$root_password" ]; then
-        echo "无法获取 MYSQL_ROOT_PASSWORD" >&2
-        return 1
-    fi
-
-    echo "$user" "$password" "$root_password"
+    # 返回关联数组
+    echo "${credentials[user]} ${credentials[password]} ${credentials[root_password]}"
 }
 
 # 检查数据库是否存在
@@ -391,26 +358,12 @@ modif_db(){
 
 # 主菜单系统
 manager_mysql() {
-    local container_name_keyword="$1"
-    local container_name
-    # 确保传入的是容器名关键词而非整个名称
-    container_name=$(get_db_container_name "$container_name_keyword")
-    if [ -z "$container_name" ]; then
-        echo "找不到对应的数据库容器。"
-        return 1
-    fi
-
-    # 获取凭据
-    local credentials
-    IFS=' ' read -r user password root_password <<< $(get_db_credentials "$container_name")
-    if [ -z "$user" ] || [ -z "$password" ] || [ -z "$root_password" ]; then
-        echo "无法获取数据库凭据。"
-        return 1
-    fi
-    credentials=($user $password $root_password)
+    container_name1="$1"
+    container_name_mysql=$(get_db_container_name "$container_name1")
+    credentials=($(get_db_credentials "$container_name_mysql"))
     while true; do
         clear
-        mysql_display "$container_name" "${credentials[2]}"
+        mysql_display "$container_name1" "${credentials[2]}"
         echo "请选择您要执行的操作："
         echo "1. 创建数据库"
         echo "2. 删除数据库"
@@ -450,35 +403,20 @@ manager_mysql() {
     done
 }
 
+# 主逻辑
 case "$1" in
     create)
         container_name1="$2"
 	dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
-        if [ -z "$container_name_mysql" ]; then
-            echo "找不到对应的数据库容器。"
-            exit 1
-        fi
         credentials=($(get_db_credentials "$container_name_mysql"))
-        if [ ${#credentials[@]} -ne 3 ]; then
-            echo "无法获取数据库凭据。"
-            exit 1
-        fi
         create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
         ;;
     delete)
         container_name1="$2"
 	dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
-        if [ -z "$container_name_mysql" ]; then
-            echo "找不到对应的数据库容器。"
-            exit 1
-        fi
         credentials=($(get_db_credentials "$container_name_mysql"))
-        if [ ${#credentials[@]} -ne 3 ]; then
-            echo "无法获取数据库凭据。"
-            exit 1
-        fi
         delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
         ;;
     manage)
@@ -488,4 +426,3 @@ case "$1" in
         echo "Usage: $0 {create|delete|manage} ..."
         exit 1
 esac
-
