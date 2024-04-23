@@ -182,25 +182,30 @@ import_database() {
 mysql_display() {
     local container_name1="$1"
     local credentials1="$2"
-    echo "可用的数据库容器:"
-    echo "---------------------------------------------"
-    printf "%-30s %-20s\n" "数据库列表" "容器名称"
-    echo "---------------------------------------------"
+    local output="可用的数据库容器:\n---------------------------------------------\n"
+    output+="%-30s %-20s\n" "数据库列表" "容器名称"
+    output+="---------------------------------------------\n"
 
-    # 列出所有运行的容器以及对应的镜像名称
+    # 获取并处理数据库列表
+    local list=$(docker ps --format "{{.Names}}\t{{.Image}}" | grep "$container_name1" | awk '{print $1}')
+    if [[ -z "$list" ]]; then
+        return 1 # 如果列表为空，返回错误码
+    fi
 
-    docker ps --format "{{.Names}}\t{{.Image}}" | grep "$container_name1" | while read -r container_name image_name; do
-        databases=$(docker exec -e MYSQL_PWD="$credentials1" "$container_name" mysql -u root -e 'SHOW DATABASES;' | sed '1d')
-        if [ -n "$databases" ]; then
-            echo "$databases" | while read db; do
-                printf "%-25s %-20s\n" "$db" "$container_name"
-            done
+    for container_name in $list; do
+        local databases=$(docker exec -e MYSQL_PWD="$credentials1" "$container_name" mysql -u root -e 'SHOW DATABASES;' | sed '1d')
+        if [[ -z "$databases" ]]; then
+            output+="没有找到数据库。\n"
         else
-            echo "没有找到数据库。"
+            for db in $databases; do
+                output+=$(printf "%-25s %-20s\n" "$db" "$container_name")
+            done
         fi
-        echo "---------------------------------------------"
+        output+="---------------------------------------------\n"
     done
+    echo -e "$output"
 }
+
 
 # 函数：通过复制表来重命名数据库
 rename_database() {
@@ -386,7 +391,14 @@ manager_mysql() {
     credentials=($(get_db_credentials "$container_name_mysql"))
     while true; do
         clear
-        mysql_display "$container_name1" "${credentials[2]}"
+        # 显示数据库容器列表，并处理可能的空列表情况
+	databases=$(mysql_display "$container_name1" "${credentials[2]}")
+	if [[ -z "$databases" ]]; then
+		echo "没有找到任何数据库，或者没有运行的数据库容器。"
+		break
+	else
+		echo "$databases"
+	fi
         echo "请选择您要执行的操作："
         echo "1. 创建数据库"
         echo "2. 删除数据库"
