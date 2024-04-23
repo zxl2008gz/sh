@@ -190,6 +190,7 @@ mysql_display() {
     local list
     list=$(docker ps --format "{{.Names}}\t{{.Image}}" | grep "$container_name1" | awk '{print $1}')
     if [[ -z "$list" ]]; then
+        echo -e "没有找到与 '$container_name1' 匹配的运行容器。"
         return 1 # 如果列表为空，返回错误码
     fi
 
@@ -203,8 +204,8 @@ mysql_display() {
                 output+=$(printf "%-25s %-20s\n" "$db" "$container_name")
             done
         fi
-        output+="---------------------------------------------\n"
     done
+    output+="---------------------------------------------\n"
     echo -e "$output"
 }
 
