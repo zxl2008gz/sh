@@ -9,17 +9,16 @@ break_end() {
 	clear
 }
 
-# 获取数据库容器的名称
-get_db_container_name() {
+# 获取数据库容器的名称列表
+get_db_container_names() {
     local db_image_keyword="$1"
     docker ps --format "{{.Names}}\t{{.Image}}" | grep "$db_image_keyword" | awk '{print $1}'
-    
 }
 
 # 选择数据库容器
 select_db_container() {
     local db_image_keyword="$1"
-    local container_names=($(get_db_container_name "$db_image_keyword"))
+    local container_names=($(get_db_container_names "$db_image_keyword"))
     
     if [ "${#container_names[@]}" -eq 0 ]; then
         echo "没有找到与 '$db_image_keyword' 匹配的运行容器。"
