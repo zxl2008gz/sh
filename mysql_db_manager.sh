@@ -25,7 +25,8 @@ safe_exec() {
 # 获取数据库容器的名称
 get_db_container_name() {
     local db_image_keyword="$1"
-    safe_exec docker ps --format "{{.Names}}\t{{.Image}}" | grep "$db_image_keyword" | awk '{print $1}'
+    # 使用docker ps并且确保关键词匹配容器名称
+    safe_exec docker ps --format "{{.Names}}" | grep -m1 "$db_image_keyword"
 }
 
 # 获取数据库配置值
@@ -367,13 +368,22 @@ modif_db(){
 # 主菜单系统
 manager_mysql() {
     local container_name_keyword="$1"
-    local container_name=$(get_db_container_name "$container_name_keyword")
+    local container_name
+    # 确保传入的是容器名关键词而非整个名称
+    container_name=$(get_db_container_name "$container_name_keyword")
     if [ -z "$container_name" ]; then
         echo "找不到对应的数据库容器。"
         return 1
     fi
+
+    # 获取凭据
+    local user password root_password
     IFS=' ' read -r user password root_password <<< $(get_db_credentials "$container_name")
     local credentials=($user $password $root_password)
+    if [ ${#credentials[@]} -ne 3 ]; then
+        echo "无法获取数据库凭据。"
+        return 1
+    fi
     while true; do
         clear
         mysql_display "$container_name" "${credentials[2]}"
