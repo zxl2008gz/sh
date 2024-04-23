@@ -22,11 +22,11 @@ safe_exec() {
     echo "$output"
 }
 
-# 获取数据库容器的名称
+# 函数：获取数据库容器的名称
 get_db_container_name() {
     local db_image_keyword="$1"
     # 使用docker ps并且确保关键词匹配容器名称
-    safe_exec docker ps --format "{{.Names}}" | grep -m1 "$db_image_keyword"
+    safe_exec docker ps --format "{{.Names}}" | grep -m1 "$db_image_keyword" | awk '{print $1}'
 }
 
 # 获取数据库配置值
@@ -39,6 +39,16 @@ get_config_value() {
 # 函数：获取数据库凭据
 get_db_credentials() {
     local container_name=$1
+    while true; do
+        # 确保传入的是容器名关键词而非整个名称
+        container_name=$(get_db_container_name "$container_name")
+        if [ -z "$container_name" ]; then
+            echo "找不到对应的数据库容器。"
+            read -p "请输入数据库容器名称或关键词：" container_name
+        else
+            break
+        fi
+    done    
     local user=$(get_config_value 'MYSQL_USER' "$container_name")
     local password=$(get_config_value 'MYSQL_PASSWORD' "$container_name")
     local root_password=$(get_config_value 'MYSQL_ROOT_PASSWORD' "$container_name")
