@@ -2,11 +2,11 @@
 
 # 函数：退出
 break_end() {
-	echo -e "\033[0;32m操作完成\033[0m"
-	echo "按任意键继续..."
-	read -n 1 -s -r -p ""
-	echo
-	clear
+    echo -e "\033[0;32m操作完成\033[0m"
+    echo "按任意键继续..."
+    read -n 1 -s -r -p ""
+    echo
+    clear
 }
 
 # 获取数据库容器的名称
@@ -19,6 +19,7 @@ get_db_container_name() {
 get_config_value() {
     local var_name="$1"
     local container_name="$2"
+    echo "正在获取 $var_name 从容器 $container_name ..." >&2
     docker exec "$container_name" /bin/sh -c "echo \${$var_name}"
 }
 
@@ -33,6 +34,7 @@ get_db_credentials() {
     credentials[root_password]=$(get_config_value 'MYSQL_ROOT_PASSWORD' "$container_name")
 
     # 返回关联数组
+    # 此处修改为将数组作为全局变量处理
     echo "${credentials[user]} ${credentials[password]} ${credentials[root_password]}"
 }
 
@@ -407,14 +409,14 @@ manager_mysql() {
 case "$1" in
     create)
         container_name1="$2"
-	dbname="$3"
+        dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
         credentials=($(get_db_credentials "$container_name_mysql"))
         create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
         ;;
     delete)
         container_name1="$2"
-	dbname="$3"
+        dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
         credentials=($(get_db_credentials "$container_name_mysql"))
         delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
