@@ -358,81 +358,71 @@ modif_db(){
 
 # 主菜单系统
 manager_mysql() {
-	local container_image_keyword="$1"
-	local container_name_mysql=$(get_db_container_name "$container_image_keyword")
-	if [[ -z "$container_name_mysql" ]]; then
-	echo "没有找到与 '$container_image_keyword' 匹配的运行容器。"
-	return 1
-	fi
-	local credentials
-	IFS=' ' read -ra credentials <<< $(get_db_credentials "$container_name_mysql")
-	local root_password="${credentials[2]}"
-	mysql_display "$container_name_mysql" "$root_password"
-	echo "请选择您要执行的操作："
-	echo "1. 创建数据库"
-	echo "2. 删除数据库"
-	echo "3. 导入数据库"
-	echo "4. 查询和修改数据库信息"
-	echo "0. 返回上一级菜单"
-	
-	read -p "请输入你的选择: " option
-	
-	case $option in
-	    1)
-		read -p "请输入数据库名称: " dbname
-		create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
-		break_end
-		;;
-	    2)
-		read -p "请输入要删除的数据库名称：" dbname
-		delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
-		break_end
-		;;
-	    3)
-		read -p "请输入数据文件的完整路径：" datafile
-		read -p "请输入数据库名称: " dbname
-		import_database "$container_name_mysql" "$dbname" "${credentials[1]}" "$datafile"
-		break_end
-		;;
-	    4)
-		modif_db "$container_name1" "${credentials[2]}" "$container_name_mysql"
-		;;
-	    0)
-		break
-		;;
-	    *)
-		echo "无效的选项，请重新输入"
-		;;
-	esac
+    container_name1="$1"
+    container_name_mysql=$(get_db_container_name "$container_name1")
+    credentials=($(get_db_credentials "$container_name_mysql"))
+    while true; do
+        clear
+        mysql_display "$container_name1" "${credentials[2]}"
+        echo "请选择您要执行的操作："
+        echo "1. 创建数据库"
+        echo "2. 删除数据库"
+        echo "3. 导入数据库"
+        echo "4. 查询和修改数据库信息"
+        echo "0. 返回上一级菜单"
+
+        read -p "请输入你的选择: " option
+
+        case $option in
+            1)
+                read -p "请输入数据库名称: " dbname
+                create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
+                break_end
+                ;;
+            2)
+                read -p "请输入要删除的数据库名称：" dbname
+                delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
+                break_end
+                ;;
+            3)
+                read -p "请输入数据文件的完整路径：" datafile
+                read -p "请输入数据库名称: " dbname
+                import_database "$container_name_mysql" "$dbname" "${credentials[1]}" "$datafile"
+                break_end
+                ;;
+            4)
+                modif_db "$container_name1" "${credentials[2]}" "$container_name_mysql"
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo "无效的选项，请重新输入"
+                ;;
+        esac
+    done
 }
 
-# 脚本入口点
-if [[ "$1" == "manage" ]]; then
-    # 确保传递了正确的参数数量
-    if [[ "$#" -ne 2 ]]; then
-        echo "Usage: $0 manage <image_keyword>"
+# 主逻辑
+case "$1" in
+    create)
+        container_name1="$2"
+	dbname="$3"
+        container_name_mysql=$(get_db_container_name "$container_name1")
+        credentials=($(get_db_credentials "$container_name_mysql"))
+        create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
+        ;;
+    delete)
+        container_name1="$2"
+	dbname="$3"
+        container_name_mysql=$(get_db_container_name "$container_name1")
+        credentials=($(get_db_credentials "$container_name_mysql"))
+        delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
+        ;;
+    manage)
+        manager_mysql "$2"
+        ;;
+    *)
+        echo "Usage: $0 {create|delete|manage} ..."
         exit 1
-    fi
-    manager_mysql "$2"
-else
-    # 处理其他选项
-    case "$1" in
-	create)
-		container_name1="$2"
-		dbname="$3"
-		container_name_mysql=$(get_db_container_name "$container_name1")
-		credentials=($(get_db_credentials "$container_name_mysql"))
-		create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
-		;;
-	delete)
-		container_name1="$2"
-		dbname="$3"
-		container_name_mysql=$(get_db_container_name "$container_name1")
-		credentials=($(get_db_credentials "$container_name_mysql"))
-		delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
-		;;
-	*)
-		echo "Usage: $0 {create|delete|manage} ..."
-		exit 1
-    esac
-fi
+esac
