@@ -436,20 +436,35 @@ manager_mysql() {
     done
 }
 
-# 主逻辑
 case "$1" in
     create)
         container_name1="$2"
 	dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
+        if [ -z "$container_name_mysql" ]; then
+            echo "找不到对应的数据库容器。"
+            exit 1
+        fi
         credentials=($(get_db_credentials "$container_name_mysql"))
+        if [ ${#credentials[@]} -ne 3 ]; then
+            echo "无法获取数据库凭据。"
+            exit 1
+        fi
         create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
         ;;
     delete)
         container_name1="$2"
 	dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
+        if [ -z "$container_name_mysql" ]; then
+            echo "找不到对应的数据库容器。"
+            exit 1
+        fi
         credentials=($(get_db_credentials "$container_name_mysql"))
+        if [ ${#credentials[@]} -ne 3 ]; then
+            echo "无法获取数据库凭据。"
+            exit 1
+        fi
         delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
         ;;
     manage)
@@ -459,3 +474,4 @@ case "$1" in
         echo "Usage: $0 {create|delete|manage} ..."
         exit 1
 esac
+
