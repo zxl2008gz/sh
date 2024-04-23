@@ -24,9 +24,9 @@ safe_exec() {
 
 # 函数：获取数据库容器的名称
 get_db_container_name() {
-    local db_image_keyword="$1"
-    # 使用docker ps并且确保关键词匹配容器名称
-    safe_exec docker ps --format "{{.Names}}" | grep -m1 "$db_image_keyword" | awk '{print $1}'
+    local image_name="$1"
+    local name=$(docker ps --filter "ancestor=$image_name" --format "{{.Names}}" | head -n 1)
+    echo "$name"
 }
 
 # 获取数据库配置值
