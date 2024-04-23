@@ -389,13 +389,11 @@ modif_db(){
 # 主菜单系统
 manager_mysql() {
     container_name1="$1"
-    container_name_mysql=$(get_db_container_name "$container_name1")
+    container_name_mysql=$(select_db_container "$container_name1")
     credentials=($(get_db_credentials "$container_name_mysql"))
     while true; do
         clear
-	echo "${credentials[2]}"
- 	break_end
-        if ! mysql_display "$container_name1" "${credentials[2]}"; then
+        if ! mysql_display "$container_name_mysql" "${credentials[2]}"; then
             echo "没有找到任何数据库，或者没有运行的数据库容器。"
             break
         fi
