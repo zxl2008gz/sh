@@ -698,8 +698,13 @@ docker_manage() {
 
 # 主逻辑
 case "$1" in
-        update)
-            update_docker
+        install)
+	    if check_docker_installed; then
+                echo "Docker is installed."
+            else
+                echo "Docker is not installed."
+		update_docker
+            fi
             ;;
         state)
             if check_docker_installed; then
