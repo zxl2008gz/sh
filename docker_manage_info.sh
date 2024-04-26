@@ -712,11 +712,7 @@ case "$1" in
             uninstall_docker
             ;;
         manage)
-            if check_docker_installed; then
-                docker_manage
-            else
-                echo "Docker is not installed."
-            fi
+            docker_manage
             ;;
         *)
             echo "Usage: $0 {update|state|uninstall|manage}"
