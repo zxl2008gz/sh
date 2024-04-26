@@ -1,12 +1,64 @@
 #!/bin/bash
 
 # 函数：退出
-break_end() {
+break_end_db() {
 	echo -e "\033[0;32m操作完成\033[0m"
 	echo "按任意键继续..."
 	read -n 1 -s -r -p ""
 	echo
 	clear
+}
+
+# 定义安装软件包函数
+install() {
+    if [ $# -eq 0 ]; then
+        echo "未提供软件包参数!"
+        return 1
+    fi
+
+    for package in "$@"; do
+        if ! command -v "$package" &>/dev/null; then
+            if command -v dnf &>/dev/null; then
+                dnf -y update && dnf install -y "$package"
+            elif command -v yum &>/dev/null; then
+                yum -y update && yum -y install "$package"
+            elif command -v apt &>/dev/null; then
+                apt update -y && apt install -y "$package"
+            elif command -v apk &>/dev/null; then
+                apk update && apk add "$package"
+            else
+                echo "未知的包管理器!"
+                return 1
+            fi
+        fi
+    done
+
+    return 0
+}
+
+# 卸载软件
+remove() {
+    if [ $# -eq 0 ]; then
+        echo "未提供软件包参数!"
+        return 1
+    fi
+
+    for package in "$@"; do
+        if command -v dnf &>/dev/null; then
+            dnf remove -y "${package}*"
+        elif command -v yum &>/dev/null; then
+            yum remove -y "${package}*"
+        elif command -v apt &>/dev/null; then
+            apt purge -y "${package}*"
+        elif command -v apk &>/dev/null; then
+            apk del "${package}*"
+        else
+            echo "未知的包管理器!"
+            return 1
+        fi
+    done
+
+    return 0
 }
 
 # 获取数据库容器的名称
@@ -112,6 +164,15 @@ delete_database() {
     local dbname=$2
     local dbroot_password=$3
     local dbuser=$4  # 添加了 dbuser 参数
+
+    # 列出所有受保护的系统数据库
+    declare -a system_dbs=("information_schema" "mysql" "performance_schema" "sys")
+
+    # 检查是否尝试删除系统数据库
+    if [[ " ${system_dbs[*]} " =~ " ${dbname} " ]]; then
+        echo "Error: Access to system schema '${dbname}' is rejected."
+        return 1
+    fi
 
     # 删除数据库
     local drop_db_command="DROP DATABASE IF EXISTS \`${dbname}\`;"
@@ -307,7 +368,7 @@ command_midif_data() {
     modify_column_data "$dbname" "$table_name" "$primary_key" "$primary_key_value" "$row_name" "$new_key_value" "$container_name_mysql" "$credentials1"
     clear
     list_table_data "$container_name_mysql" "$credentials1" "$dbname" "$table_name"
-    break_end
+    break_end_db
 }
 
 # 修改数据库
@@ -329,18 +390,18 @@ modif_db(){
             1)
                 read -p "请输入要查询的数据库名称: " dbname
                 query_database "$container_name_mysql" "$credentials1" "$dbname"
-                break_end
+                break_end_db
                 ;;
             2)
                 read -p "请输入要修改的原数据库名称: " old_dbname
                 read -p "请输入新数据库名称: " new_dbname
                 rename_database "$old_dbname" "$new_dbname" "$container_name_mysql" "$credentials1" 
-                break_end               
+                break_end_db               
                 ;;
             3)
                 read -p "请输入要修改数据表的数据库名称: " dbname
                 command_midif_db "$container_name_mysql" "$credentials1" "$dbname"
-                break_end
+                break_end_db
                 ;;
             4)
                 read -p "请输入要修改数据表的数据库名称: " dbname
@@ -356,18 +417,292 @@ modif_db(){
     done
 }
 
+# 检查Docker是否安装
+check_docker_installed_db() {
+    if ! command -v docker &>/dev/null; then
+        echo "Docker 未安装。"
+        return 1
+    fi
+}
+
+# 开启容器的 IPv6 功能，以及限制日志文件大小，防止 Docker 日志塞满硬盘
+Limit_log_db() {
+    cat > /etc/docker/daemon.json <<EOF
+{
+    "log-driver": "json-file",
+    "log-opts": {
+        "max-size": "20m",
+        "max-file": "3"
+    },
+    "ipv6": true,
+    "fixed-cidr-v6": "fd00:dead:beef:c0::/80",
+    "experimental":true,
+    "ip6tables":true
+}
+EOF
+}
+
+# 定义安装更新 Docker 的函数
+update_docker_db() {
+    if [ -f "/etc/alpine-release" ]; then
+        # 更新软件包索引
+        apk update
+
+        # 安装一个更完整的内核版本
+        # apk add linux-lts
+
+        # 安装 Docker
+        apk add docker
+
+        # 将 Docker 添加到默认运行级别并启动
+        rc-update add docker default
+        Limit_log_db
+        service docker start || rc-service docker start
+
+        # 安装 Docker Compose
+        apk add docker-compose
+
+    else
+        # 其他 Linux 发行版，使用 Docker 的官方安装脚本
+        curl -fsSL https://get.docker.com | sh
+
+        # Docker Compose 需要单独安装，这里使用 Linux 的通用安装方法
+        # 注意：这里需要检查 Docker Compose 的官方GitHub仓库以获得最新安装步骤
+        LATEST_COMPOSE=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+        curl -L "https://github.com/docker/compose/releases/download/${LATEST_COMPOSE}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+
+        # 为了兼容性，检查是否安装了 systemctl，如果是则启动并使能 Docker 服务
+        if command -v systemctl &>/dev/null; then
+            systemctl start docker
+            systemctl enable docker
+            Limit_log_db  
+        fi
+    fi
+
+    sleep 2
+}
+
+# 函数：获取用户输入或默认数据，20秒后无输入则使用默认值，如果开始输入则等待完成
+get_default_data_db() {
+    local prompt="$1"
+    local default_value="$2"
+    local timeout="$3"
+    local input=""
+    local partial_input=""
+    
+    # 首次尝试读取输入，20秒超时
+    read -t $timeout -p "$prompt (默认为：$default_value): " input || partial_input="$input"
+
+    # 检查是否有部分输入
+    if [ -n "$partial_input" ]; then
+        # 如果有部分输入，继续读取直到完成
+        input="$partial_input"
+        while IFS= read -r -n1 -s char; do
+            # 读取单个字符，没有超时
+            input+="$char"
+            # 检查是否是结束字符（回车）
+            if [[ "$char" == $'\n' ]]; then
+                break
+            fi
+        done
+        # 从输入中移除最后的换行符
+        input="${input%$'\n'}"
+    elif [ -z "$input" ]; then
+        # 超时无输入，使用默认值
+        input="$default_value"
+    fi
+
+    echo "$input"
+}
+
+# 获取持久化路径
+get_mysql_volume_path() {
+    local container_name=$1  # 例如：mysql_container
+
+    # 使用 docker inspect 命令获取挂载卷信息
+    local volume_path=$(docker inspect --format='{{range .Mounts}}{{println .Source .Destination}}{{end}}' $container_name | grep '/var/lib/mysql' | awk '{print $1}')
+    
+    # 输出路径
+    echo $volume_path
+}
+
+# 函数：重置MySQL容器及其数据，并备份数据库
+reset_mysql_container() {
+    local container_name="$1"  # MySQL容器名称
+    local backup_path="$2"     # 数据库备份的路径
+
+    local container_path=$(get_mysql_volume_path $container_name)
+
+    # 确保提供了容器名称和备份路径
+    if [[ -z "$container_name" || -z "$backup_path" ]]; then
+        echo "Usage: reset_mysql_container <container_name> <container_path> <backup_path>"
+        return 1
+    fi
+
+    # 确保备份目录存在
+    mkdir -p "$backup_path"
+
+    # 生成备份文件名，包含当前日期和时间
+    local current_time=$(date +"%Y%m%d_%H%M%S")
+    local backup_file="db_backup_$current_time.sql"
+
+    # 备份数据库
+    echo "正在备份数据库..."
+    docker exec "$container_name" mysqldump --all-databases --extended-insert --user=root --password=root > "$backup_path/$backup_file"
+
+    # 停止并删除MySQL容器
+    echo "正在停止并删除MySQL容器..."
+    docker stop "$container_name"
+    docker rm "$container_name"
+
+    # 删除与MySQL容器关联的所有数据卷
+    echo "正在删除与MySQL容器关联的所有数据卷..."
+    sudo rm -rf "$container_path"
+
+    echo "MySQL容器及其数据卷已删除。备份存储在：$backup_path/$backup_file"
+}
+
+# 安装更新MYSQL环境
+update_db() {
+    db_mysql_path=$(get_default_data_db "请输入MYSQL的路径" "/home/docker" "20") 
+    # 创建必要的目录和文件
+    if [ -z "$db_mysql_path" ]; then
+        echo "Error: db_mysql_path is not set."
+        exit 1
+    fi
+
+    mkdir -p "$db_mysql_path" && cd "$db_mysql_path" && \
+    mkdir -p mysql mysql_backup && \
+    touch docker-compose-mysql.yml
+
+    mysql_container_name=$(get_default_data_db "请输入MYSQL的容器名" "mysql" "20") 
+    mysql_container_image=$(get_default_data_db "请输入MYSQL的镜像名" "mysql" "20")
+    mysql_container_volume=$(get_default_data_db "请输入持久化volume路径" "./mysql" "20")
+
+    mysql_container_rootwd=$(get_default_data_db "请设置MYSQL的容器的root密码" "mysqlwebroot" "20") 
+    mysql_container_dbuse=$(get_default_data_db "请设置MYSQL的容器的用户名" "mysqluse" "20")
+    mysql_container_passwd=$(get_default_data_db "请设置MYSQL的容器的用户密码" "mysqlpasswd" "20")
+
+    install openssl
+
+    # 判断是否使用了默认密码，并在是的情况下生成新的随机密码
+    if [[ "$mysql_container_rootwd" == "mysqlwebroot" ]]; then
+        echo "使用默认root密码，正在生成新的随机密码..."
+        mysql_container_rootwd=$(openssl rand -base64 16)
+        echo "新的root密码：$mysql_container_rootwd"
+    fi
+
+    if [[ "$mysql_container_dbuse" == "mysqluse" ]]; then
+        echo "使用默认用户名，正在生成新的随机用户名..."
+        mysql_container_dbuse=$(openssl rand -hex 4)
+        echo "新的用户名：$mysql_container_dbuse"
+    fi
+
+    if [[ "$mysql_container_passwd" == "mysqlpasswd" ]]; then
+        echo "使用默认用户密码，正在生成新的随机密码..."
+        mysql_container_passwd=$(openssl rand -base64 8)
+        echo "新的用户密码：$mysql_container_passwd"
+    fi
+
+    # 下载 docker-compose.yml 文件并进行替换
+    wget -O $db_mysql_path/docker-compose-mysql.yml https://raw.githubusercontent.com/zxl2008gz/docker/main/LDNMP/docker-compose-mysql.yml
+
+    # 在 docker-compose.yml 文件中进行替换
+    sed -i "s|mysqlwebroot|$mysql_container_rootwd|g" $db_mysql_path/docker-compose-mysql.yml
+    sed -i "s|mysqlpasswd|$mysql_container_passwd|g" $db_mysql_path/docker-compose-mysql.yml
+    sed -i "s|mysqluse|$mysql_container_dbuse|g" $db_mysql_path/docker-compose-mysql.yml
+
+    reset_mysql_container "$mysql_container_name" "$db_mysql_path/mysql_backup"
+}
+
+# 安装更新mysql环境
+install_db_mysql() {
+    update_db
+    cd $db_mysql_path && docker-compose -f docker-compose-mysql.yml up -d
+    sleep 5
+}
+
+# 检查MySQL是否安装
+check_mysql_installed_db() {
+    if ! command -v mysql >/dev/null 2>&1; then
+        echo "MySQL 未安装。"
+        return 1
+    else
+        return 0
+    fi
+}
+
+# MYSQL管理器
+manager_db_mysql() {
+    local container_name1="$1"
+    local container_name_mysql=$(get_db_container_name "$container_name1")
+    local credentials=($(get_db_credentials "$container_name_mysql"))
+    while true; do
+        clear
+        echo "▶ MYSQL管理器"
+        echo "------------------------"
+        echo "1. 安装更新MYSQL环境"
+        echo "------------------------"				
+        echo "2. 查看MYSQL全局状态"
+        echo "------------------------"
+        echo "3. MYSQL容器管理 ▶"
+        echo "------------------------"				
+        echo "21. 卸载MYSQL环境"	
+        echo "------------------------"		
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            1)
+                if check_mysql_installed_db; then
+                    mysql --version                    
+                else
+                    if check_docker_installed_db; then
+                        install_db_mysql
+                    else
+                        echo "Docker is not installed."
+                        update_docker
+                    fi
+                fi                
+                # break_end_db
+                exit
+                ;;
+            2)
+                clear
+                mysql_display "$container_name1" "${credentials[2]}"
+                break_end_db
+                ;;
+            3)
+                manager_mysql $container_name1
+                ;;
+            21)
+                reset_mysql_container "$container_name_mysql" "$db_mysql_path/mysql_backup"
+                break_end_db
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo "无效的选项，请重新输入！"
+                ;;
+        esac
+    done
+}
+
 # 主菜单系统
 manager_mysql() {
-    container_name1="$1"
-    container_name_mysql=$(get_db_container_name "$container_name1")
-    credentials=($(get_db_credentials "$container_name_mysql"))
+    local container_name1="$1"
+    local container_name_mysql=$(get_db_container_name "$container_name1")
+    local credentials=($(get_db_credentials "$container_name_mysql"))
     while true; do
         clear
         mysql_display "$container_name1" "${credentials[2]}"
         echo "请选择您要执行的操作："
-        echo "1. 创建数据库"
-        echo "2. 删除数据库"
-        echo "3. 导入数据库"
+        echo "1. 创建新的数据库"
+        echo "2. 删除指定数据库"
+        echo "3. 导入指定数据库"
         echo "4. 查询和修改数据库信息"
         echo "0. 返回上一级菜单"
 
@@ -375,20 +710,23 @@ manager_mysql() {
 
         case $option in
             1)
-                read -p "请输入数据库名称: " dbname
-                create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
-                break_end
+                read -p "请输入新数据库名称: " dbname
+                read -p "请输入存放新数据库的容器: " container_save_name
+                create_database_and_grant "$container_save_name" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
+                break_end_db
                 ;;
             2)
                 read -p "请输入要删除的数据库名称：" dbname
-                delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
-                break_end
+                read -p "请输入要删除数据库的容器: " container_save_name
+                delete_database "$container_save_name" "$dbname" "${credentials[2]}" "${credentials[0]}"
+                break_end_db
                 ;;
             3)
-                read -p "请输入数据文件的完整路径：" datafile
-                read -p "请输入数据库名称: " dbname
-                import_database "$container_name_mysql" "$dbname" "${credentials[1]}" "$datafile"
-                break_end
+                read -p "请输入要导入数据文件的完整路径：" datafile
+                read -p "请输入要导入数据库名称: " dbname
+                read -p "请输入要导入数据库的容器名称: " container_save_name
+                import_database "$container_save_name" "$dbname" "${credentials[1]}" "$datafile"
+                break_end_db
                 ;;
             4)
                 modif_db "$container_name1" "${credentials[2]}" "$container_name_mysql"
@@ -420,7 +758,7 @@ case "$1" in
         delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
         ;;
     manage)
-        manager_mysql "$2"
+        manager_db_mysql "$2"
         ;;
     *)
         echo "Usage: $0 {create|delete|manage} ..."
