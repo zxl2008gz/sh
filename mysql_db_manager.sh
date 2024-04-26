@@ -743,12 +743,19 @@ manager_mysql() {
 
 # 主逻辑
 case "$1" in
-    create)
-        container_name1="$2"
-	dbname="$3"
-        container_name_mysql=$(get_db_container_name "$container_name1")
-        credentials=($(get_db_credentials "$container_name_mysql"))
-        create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
+    install)
+        if check_mysql_installed_db; then
+	    mysql --version                    
+	else
+	    if check_docker_installed_db; then
+		install_db_mysql
+	    else
+		echo "Docker is not installed."
+		update_docker
+	    fi
+	fi                
+	# break_end_db
+	exit
         ;;
     delete)
         container_name1="$2"
