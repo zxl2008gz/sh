@@ -473,7 +473,7 @@ common_tool_install() {
                 break_end
                 ;;
             0)
-                solin
+                break
                 ;;
 
             *)
