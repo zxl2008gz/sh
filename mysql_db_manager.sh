@@ -723,11 +723,11 @@ manager_db_mysql() {
                     # 如果 MySQL 容器未运行，检查 Docker 是否安装
                     if check_docker_installed_db; then
                         echo "MySQL container is not running. Attempting to start or install MySQL container."
-                        install_db_mysql "$2" 
                     else
                         echo "Docker is not installed."
                         update_docker
                     fi
+		    install_db_mysql "$2" 
                 fi
                 exit
                 ;;
@@ -811,7 +811,26 @@ manager_mysql() {
 # 主逻辑
 case "$1" in
     install)
-        install_db_mysql "$2" 
+        # 检查 MySQL 是否已经安装并运行
+	if check_mysql_installed_db; then
+	    echo "Running 'mysql --version' to check the installed MySQL version:"
+	    docker exec mysql mysql --version
+	    if ask_confirmation "MySQL已安装，确定要更新MySQL吗?（更新后用户名等信息会变）"; then
+		install_db_mysql "$2" 
+	    else
+		echo "操作已取消。"
+	    fi
+	else
+	    # 如果 MySQL 容器未运行，检查 Docker 是否安装
+	    if check_docker_installed_db; then
+		echo "MySQL container is not running. Attempting to start or install MySQL container."
+	    else
+		echo "Docker is not installed."
+		update_docker
+	    fi
+	    install_db_mysql "$2" 
+	fi
+	exit
         ;;
     delete)
         container_name1="$2"
