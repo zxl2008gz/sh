@@ -832,6 +832,9 @@ case "$1" in
 	fi
 	exit
         ;;
+    createfile)
+ 	update_db
+  	;;
     delete)
         container_name1="$2"
 	    dbname="$3"
