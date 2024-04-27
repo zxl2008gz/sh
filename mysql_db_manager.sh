@@ -527,21 +527,19 @@ get_mysql_volume_path() {
     echo $volume_path
 }
 
-# 函数：重置MySQL容器及其数据，并备份数据库
-reset_mysql_container() {
+# 备份数据库
+beifen_mysql() {
+
     local container_name="$1"  # MySQL容器名称
     local backup_path="$2"     # 数据库备份的路径
-
-    local container_path=$(get_mysql_volume_path $container_name)
-
-    # 确保提供了容器名称和备份路径
-    if [[ -z "$container_name" || -z "$backup_path" ]]; then
-        echo "Usage: reset_mysql_container <container_name> <container_path> <backup_path>"
-        return 1
-    fi
-
     # 确保备份目录存在
     mkdir -p "$backup_path"
+
+    # 确保提供了容器名称和备份路径
+    if [[  -z "$backup_path" ]]; then
+        echo "Usage: reset_mysql_container <container_name> <backup_path>"
+        return 1
+    fi
 
     # 生成备份文件名，包含当前日期和时间
     local current_time=$(date +"%Y%m%d_%H%M%S")
@@ -550,6 +548,24 @@ reset_mysql_container() {
     # 备份数据库
     echo "正在备份数据库..."
     docker exec "$container_name" mysqldump --all-databases --extended-insert --user=root --password=root > "$backup_path/$backup_file"
+
+}
+
+# 函数：重置MySQL容器及其数据，并备份数据库
+reset_mysql_container() {
+    local container_name="$1"  # MySQL容器名称
+    local backup_path="$2"     # 数据库备份的路径
+
+    local container_path=$(get_mysql_volume_path $container_name)
+
+    # 确保提供了容器名称和备份路径
+    if [[ -z "$container_name" ]]; then
+        echo "Usage: reset_mysql_container <container_name> <container_path>"
+        return 1
+    fi
+
+    #备份
+    beifen_mysql $container_name $backup_path
 
     # 停止并删除MySQL容器
     echo "正在停止并删除MySQL容器..."
@@ -647,6 +663,8 @@ manager_db_mysql() {
         echo "2. 查看MYSQL全局状态"
         echo "------------------------"
         echo "3. MYSQL容器管理 ▶"
+        echo "------------------------"		
+        echo "4. MYSQL备份 ▶"
         echo "------------------------"				
         echo "21. 卸载MYSQL环境"	
         echo "------------------------"		
@@ -676,6 +694,12 @@ manager_db_mysql() {
                 ;;
             3)
                 manager_mysql $container_name1
+                ;;
+            4)
+                local container_name1="$1"
+                local container_name_mysql=$(get_db_container_name "$container_name1")
+                local credentials=($(get_db_credentials "$container_name_mysql"))
+                beifen_mysql "$container_name_mysql" "$db_mysql_path/mysql_backup"
                 ;;
             21)
                 reset_mysql_container "$container_name_mysql" "$db_mysql_path/mysql_backup"
@@ -759,7 +783,7 @@ case "$1" in
         ;;
     delete)
         container_name1="$2"
-	dbname="$3"
+	    dbname="$3"
         container_name_mysql=$(get_db_container_name "$container_name1")
         credentials=($(get_db_credentials "$container_name_mysql"))
         delete_database "$container_name_mysql" "$dbname" "${credentials[2]}" "${credentials[0]}"
