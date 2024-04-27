@@ -702,7 +702,7 @@ manager_db_mysql() {
                     # 如果 MySQL 容器未运行，检查 Docker 是否安装
                     if check_docker_installed_db; then
                         echo "MySQL container is not running. Attempting to start or install MySQL container."
-                        install_db_mysql "your_mysql_root_password"  # 这里假设你安装时设置的 root 密码
+                        install_db_mysql "$2" 
                     else
                         echo "Docker is not installed."
                         update_docker
@@ -796,7 +796,7 @@ case "$1" in
             # 如果 MySQL 容器未运行，检查 Docker 是否安装
             if check_docker_installed_db; then
                 echo "MySQL container is not running. Attempting to start or install MySQL container."
-                install_db_mysql "your_mysql_root_password"  # 这里假设你安装时设置的 root 密码
+                install_db_mysql "$2" 
             else
                 echo "Docker is not installed."
                 update_docker
