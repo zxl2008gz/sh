@@ -700,6 +700,7 @@ manager_db_mysql() {
                 local container_name_mysql=$(get_db_container_name "$container_name1")
                 local credentials=($(get_db_credentials "$container_name_mysql"))
                 beifen_mysql "$container_name_mysql" "$db_mysql_path/mysql_backup"
+                break_end_db
                 ;;
             21)
                 reset_mysql_container "$container_name_mysql" "$db_mysql_path/mysql_backup"
