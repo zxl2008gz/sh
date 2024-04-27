@@ -532,6 +532,7 @@ beifen_mysql() {
 
     local container_name="$1"  # MySQL容器名称
     local backup_path="$2"     # 数据库备份的路径
+    local dbrootpasswd="$3"
     # 确保备份目录存在
     mkdir -p "$backup_path"
 
@@ -547,7 +548,9 @@ beifen_mysql() {
 
     # 备份数据库
     echo "正在备份数据库..."
-    docker exec "$container_name" mysqldump --all-databases --extended-insert --user=root --password=root > "$backup_path/$backup_file"
+    docker exec "$container_name" mysqldump --all-databases --extended-insert --user=root --password="$dbrootpasswd" > "$backup_path/$backup_file"
+    
+    echo "MySQL容器备份存储在：$backup_path/$backup_file"
 
 }
 
@@ -555,7 +558,7 @@ beifen_mysql() {
 reset_mysql_container() {
     local container_name="$1"  # MySQL容器名称
     local backup_path="$2"     # 数据库备份的路径
-
+    local dbrootpasswd="$3"
     local container_path=$(get_mysql_volume_path $container_name)
 
     # 确保提供了容器名称和备份路径
@@ -565,7 +568,7 @@ reset_mysql_container() {
     fi
 
     #备份
-    beifen_mysql $container_name $backup_path
+    beifen_mysql $container_name $backup_path $dbrootpasswd
 
     # 停止并删除MySQL容器
     echo "正在停止并删除MySQL容器..."
@@ -581,6 +584,9 @@ reset_mysql_container() {
 
 # 安装更新MYSQL环境
 update_db() {
+    local container_name="$1"
+    local dbrootpasswd="$2"
+
     db_mysql_path=$(get_default_data_db "请输入MYSQL的路径" "/home/docker" "20") 
     # 创建必要的目录和文件
     if [ -z "$db_mysql_path" ]; then
@@ -629,12 +635,15 @@ update_db() {
     sed -i "s|mysqlpasswd|$mysql_container_passwd|g" $db_mysql_path/docker-compose-mysql.yml
     sed -i "s|mysqluse|$mysql_container_dbuse|g" $db_mysql_path/docker-compose-mysql.yml
 
-    reset_mysql_container "$mysql_container_name" "$db_mysql_path/mysql_backup"
+    reset_mysql_container "$container_name" "$db_mysql_path/mysql_backup" "$dbrootpasswd"
 }
 
 # 安装更新mysql环境
 install_db_mysql() {
-    update_db
+    local container_name1="$1"
+    local container_name_mysql=$(get_db_container_name "$container_name1")
+    local credentials=($(get_db_credentials "$container_name_mysql"))
+    update_db "$container_name_mysql" "${credentials[2]}"
     cd $db_mysql_path && docker-compose -f docker-compose-mysql.yml up -d
     sleep 5
 }
@@ -647,6 +656,16 @@ check_mysql_installed_db() {
     else
         return 0
     fi
+}
+
+#备份数据文件
+benfen_db_mysql() {
+    local container_name1="$1"
+    local container_name_mysql=$(get_db_container_name "$container_name1")
+    local credentials=($(get_db_credentials "$container_name_mysql"))
+    mysql_display "$container_name1" "${credentials[2]}"
+    read -p "请输入要备份的数据库的容器名称: " container_save_name
+    beifen_mysql $container_save_name "/home/docker/mysql_backup" "${credentials[2]}"
 }
 
 # MYSQL管理器
@@ -678,7 +697,7 @@ manager_db_mysql() {
                     mysql --version                    
                 else
                     if check_docker_installed_db; then
-                        install_db_mysql
+                        install_db_mysql "$2"
                     else
                         echo "Docker is not installed."
                         update_docker
@@ -696,10 +715,7 @@ manager_db_mysql() {
                 manager_mysql $container_name1
                 ;;
             4)
-                local container_name1="$1"
-                local container_name_mysql=$(get_db_container_name "$container_name1")
-                local credentials=($(get_db_credentials "$container_name_mysql"))
-                beifen_mysql "$container_name_mysql" "$db_mysql_path/mysql_backup"
+                benfen_db_mysql "$container_name1"
                 break_end_db
                 ;;
             21)
@@ -770,17 +786,17 @@ manager_mysql() {
 case "$1" in
     install)
         if check_mysql_installed_db; then
-	    mysql --version                    
-	else
-	    if check_docker_installed_db; then
-		install_db_mysql
-	    else
-		echo "Docker is not installed."
-		update_docker
-	    fi
-	fi                
-	# break_end_db
-	exit
+	        mysql --version                    
+        else
+            if check_docker_installed_db; then
+                install_db_mysql "$2"
+            else
+                echo "Docker is not installed."
+                update_docker
+            fi
+        fi                
+        # break_end_db
+        exit
         ;;
     delete)
         container_name1="$2"
