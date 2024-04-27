@@ -650,12 +650,11 @@ install_db_mysql() {
 
 # 函数：检查 MySQL 容器是否运行
 check_mysql_installed_db() {
-    echo "Checking if MySQL container is running..."
     if docker ps | grep -q mysql; then
-        echo "MySQL container is found running."
+        echo "MySQL 已安装并且正在运行."
         return 0  # MySQL 已安装并且正在运行
     else
-        echo "MySQL container is not installed or not running."
+        echo "MySQL 未安装或未运行"
         return 1  # MySQL 未安装或未运行
     fi
 }
