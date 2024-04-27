@@ -61,6 +61,21 @@ remove() {
     return 0
 }
 
+# 函数：询问用户确认
+ask_confirmation() {
+    local prompt="$1"
+    local choice
+
+    while true; do
+        read -p "$prompt (Y/N): " choice
+        case "$choice" in
+            [Yy]) return 0 ;;
+            [Nn]) return 1 ;;
+            *) echo "无效的选择，请输入 Y 或 N。" ;;
+        esac
+    done
+}
+
 # 获取数据库容器的名称
 get_db_container_name() {
     local db_image_keyword="$1"
@@ -645,6 +660,7 @@ install_db_mysql() {
     local credentials=($(get_db_credentials "$container_name_mysql"))
     update_db "$container_name_mysql" "${credentials[2]}"
     cd $db_mysql_path && docker-compose -f docker-compose-mysql.yml up -d
+    echo -e "安装信息如下： \n新的用户名: '"$mysql_container_dbuse"' \n新的用户密码: '"$mysql_container_passwd"' \n新的root密码: '"$mysql_container_rootwd"' "
     sleep 5
 }
 
@@ -698,6 +714,11 @@ manager_db_mysql() {
                 if check_mysql_installed_db; then
                     echo "Running 'mysql --version' to check the installed MySQL version:"
                     docker exec mysql mysql --version
+                    if ask_confirmation "MySQL已安装，确定要更新MySQL吗?（更新后用户名等信息会变）"; then
+                        install_db_mysql "$2" 
+                    else
+                        echo "操作已取消。"
+                    fi
                 else
                     # 如果 MySQL 容器未运行，检查 Docker 是否安装
                     if check_docker_installed_db; then
@@ -719,6 +740,7 @@ manager_db_mysql() {
                 manager_mysql $container_name1
                 ;;
             4)
+                clear
                 benfen_db_mysql "$container_name1"
                 break_end_db
                 ;;
@@ -789,20 +811,7 @@ manager_mysql() {
 # 主逻辑
 case "$1" in
     install)
-        if check_mysql_installed_db; then
-            echo "Running 'mysql --version' to check the installed MySQL version:"
-            docker exec mysql mysql --version
-        else
-            # 如果 MySQL 容器未运行，检查 Docker 是否安装
-            if check_docker_installed_db; then
-                echo "MySQL container is not running. Attempting to start or install MySQL container."
-                install_db_mysql "$2" 
-            else
-                echo "Docker is not installed."
-                update_docker
-            fi
-        fi
-        exit
+        install_db_mysql "$2" 
         ;;
     delete)
         container_name1="$2"
