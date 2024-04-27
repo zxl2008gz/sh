@@ -82,6 +82,12 @@ get_db_container_name() {
     docker ps --format "{{.Names}}\t{{.Image}}" | grep "$db_image_keyword" | awk '{print $1}'
 }
 
+# 获取数据库容器的名称
+get_db_container_name() {
+    local container_type=$1
+    docker ps --format "{{.Names}}\t{{.Image}}" | awk -v ct="$container_type" '$2 ~ ct {print $1}'
+}
+
 # 获取数据库配置值
 get_config_value() {
     local var_name="$1"
