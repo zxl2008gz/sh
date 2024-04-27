@@ -702,7 +702,7 @@ manager_db_mysql() {
                         echo "Docker is not installed."
                         update_docker
                     fi
-                fi                
+                fi            
                 # break_end_db
                 exit
                 ;;
@@ -786,7 +786,7 @@ manager_mysql() {
 case "$1" in
     install)
         if check_mysql_installed_db; then
-	        mysql --version                    
+            mysql --version                    
         else
             if check_docker_installed_db; then
                 install_db_mysql "$2"
@@ -794,7 +794,7 @@ case "$1" in
                 echo "Docker is not installed."
                 update_docker
             fi
-        fi                
+        fi           
         # break_end_db
         exit
         ;;
