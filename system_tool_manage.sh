@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# 创建示例脚本
-echo -e '#!/bin/bash\n\necho "Solin script executed."' > ~/solin.sh
-
 # 确保脚本具有可执行权限
 chmod +x ~/solin.sh
 
