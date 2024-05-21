@@ -110,9 +110,10 @@ remove() {
 
 # 设置快捷键
 set_shortcut_keys() {
-    read -p "请输入你的快捷按键: " kuaijiejian
+    read -n 1 -p "请输入你的快捷按键: " kuaijiejian
+    echo
     # 添加完整的命令路径以避免任何混淆
-    echo "alias $kuaijiejian='~/solin.sh'" >> ~/.bashrc
+    echo "alias $kuaijiejian='bash ~/solin.sh'" >> ~/.bashrc
     # 提示用户手动source或重启终端
     source ~/.bashrc
     echo "快捷键已设置。"
