@@ -108,7 +108,8 @@ set_shortcut_keys() {
     # 添加完整的命令路径以避免任何混淆
     echo "alias $kuaijiejian='~/solin.sh'" >> ~/.bashrc
     # 提示用户手动source或重启终端
-    echo "快捷键已设置。请运行 'source ~/.bashrc' 或重新启动终端以应用更改。"
+    source ~/.bashrc
+    echo "快捷键已设置。"
 }
 
 # 设置root密码
