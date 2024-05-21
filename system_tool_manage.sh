@@ -1,10 +1,4 @@
 #!/bin/bash
-# ln -sf ~/solin.sh /usr/local/bin/s
-
-# solin() {
-# 	s
-# 	exit
-# }
 
 # 开放所有端口
 iptables_open() {
@@ -112,7 +106,7 @@ remove() {
 set_shortcut_keys() {
     read -p "请输入你的快捷按键: " kuaijiejian
     # 添加完整的命令路径以避免任何混淆
-    echo "alias $kuaijiejian='/usr/local/bin/solin'" >> ~/.bashrc
+    echo "alias $kuaijiejian='~/solin.sh'" >> ~/.bashrc
     # 提示用户手动source或重启终端
     echo "快捷键已设置。请运行 'source ~/.bashrc' 或重新启动终端以应用更改。"
 }
