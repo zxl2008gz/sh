@@ -1,12 +1,20 @@
 #!/bin/bash
 
+huang='\033[33m'
+bai='\033[0m'
+lv='\033[0;32m'
+lan='\033[0;34m'
+hong='\033[31m'
+lianglan='\033[96m'
+hui='\e[37m'
+
 # 函数：退出
-break_end_docker() {
-	echo -e "\033[0;32m操作完成\033[0m"
-	echo "按任意键继续..."
-	read -n 1 -s -r -p ""
-	echo
-	clear
+break_end() {
+    echo -e "${lv}操作完成${bai}"
+    echo "按任意键继续..."
+    read -n 1 -s -r -p ""
+    echo
+    clear
 }
 
 # 检查Docker是否安装
@@ -18,7 +26,7 @@ check_docker_installed() {
 }
 
 # 函数：询问用户确认
-ask_confirmation_docker() {
+ask_confirmation() {
     local prompt="$1"
     local choice
 
@@ -277,44 +285,44 @@ docker_container_manage() {
                         fi
                         ;;
                 esac
-                break_end_docker
+                break_end
                 ;;
             6)
                 docker start $(docker ps -a -q)
-                break_end_docker
+                break_end
                 ;;
             7)
                 # docker stop $(docker ps -q)
                 execute_check_command "stop" "all"
-                break_end_docker
+                break_end
                 ;;
             8)
-                if ask_confirmation_docker "确定删除所有容器吗？"; then
+                if ask_confirmation "确定删除所有容器吗？"; then
                     docker rm -f $(docker ps -a -q) && echo "已删除所有容器。" || echo "删除操作失败。"
                 else
                     echo "操作已取消。"
                 fi
-                break_end_docker
+                break_end
                 ;;
             9)
                 execute_check_command "restart" "all"
-                break_end_docker
+                break_end
                 ;;
             11)
                 container_name=$(get_container_name_docker)
                 docker exec -it $container_name /bin/bash
-                break_end_docker
+                break_end
                 ;;
             12)
                 container_name=$(get_container_name_docker)
                 docker logs $container_name
-                break_end_docker
+                break_end
                 ;;
             13)
                 echo ""
                 echo "------------------------------------------------------------"
                 display_network_info  
-                break_end_docker  
+                break_end  
                 ;;
             0)
                 break  # 跳出循环，退出菜单
@@ -359,7 +367,7 @@ image_management() {
                 fi
                 ;;
             3)
-                if ask_confirmation_docker "确定删除所有镜像吗？"; then
+                if ask_confirmation "确定删除所有镜像吗？"; then
                     if [ -n "$(docker images -q)" ]; then  # 检查是否有镜像
                         docker rmi -f $(docker images -q)
                         echo "所有镜像已删除。"
@@ -378,7 +386,7 @@ image_management() {
                 break  # 跳出循环，退出菜单
                 ;;
         esac
-        break_end_docker
+        break_end
     done
 }
 
@@ -411,21 +419,21 @@ network_management() {
                 read -p "设置新网络名: " dockernetwork
                 docker network create $dockernetwork
                 echo "$dockernetwork 网络已设置成功。"
-                break_end_docker
+                break_end
                 ;;
             2)
                 read -p "加入网络名: " dockernetwork
                 read -p "容器名称或ID: " dockername
                 docker network connect $dockernetwork $dockername
                 echo "容器已加入到 $dockernetwork 网络。"
-                break_end_docker
+                break_end
                 ;;
             3)
                 read -p "退出网络名: " dockernetwork
                 read -p "容器名称或ID: " dockername
                 docker network disconnect $dockernetwork $dockername
                 echo "容器已从 $dockernetwork 网络退出。"
-                break_end_docker
+                break_end
                 ;;
             4)
                 read -p "请输入要删除的网络名: " dockernetwork
@@ -433,7 +441,7 @@ network_management() {
                 local connected_containers=$(docker network inspect $dockernetwork --format '{{ range .Containers }}{{ .Name }} {{ end }}')
                 if [[ -n "$connected_containers" ]]; then
                     echo "警告: 以下容器正在使用 $dockernetwork 网络: $connected_containers"
-                    if ask_confirmation_docker "你确定要断开这些容器的网络连接并删除网络吗？"; then
+                    if ask_confirmation "你确定要断开这些容器的网络连接并删除网络吗？"; then
                         for container in $connected_containers; do
                             docker network disconnect $dockernetwork $container
                         done
@@ -446,7 +454,7 @@ network_management() {
                     docker network rm $dockernetwork
                     echo "$dockernetwork 网络已删除。"
                 fi
-                break_end_docker
+                break_end
                 ;;
             0)
                 break  # 跳出循环，退出菜单
@@ -542,13 +550,57 @@ clean_volume_network_container() {
     echo "请审查即将删除的 Docker 对象："
     review_prune_candidates
 
-    if ask_confirmation_docker "确定要继续清理吗？"; then
+    if ask_confirmation "确定要继续清理吗？"; then
         echo "正在清理，请稍候..."
         docker system prune -af --volumes
         echo "清理完成。"
     else
         echo "操作已取消。"
     fi
+}
+
+# 函数：重启Docker服务
+docker_restart() {
+    if [ -f "/etc/alpine-release" ]; then
+        service docker restart &>/dev/null
+    else
+        systemctl restart docker &>/dev/null
+    fi
+    if [ $? -eq 0 ]; then
+        echo "Docker服务已重启"
+    else
+        echo "Docker服务重启失败" >&2
+    fi
+}
+
+# 函数：启用Docker的IPv6支持
+docker_ipv6_on() {
+    # 创建配置目录（如果不存在）
+    mkdir -p /etc/docker
+
+    # 写入IPv6配置到daemon.json
+    cat > /etc/docker/daemon.json << EOF
+{
+  "ipv6": true,
+  "fixed-cidr-v6": "2001:db8:1::/64"
+}
+EOF
+
+    # 重启Docker服务以应用更改
+    docker_restart
+
+    echo "Docker已开启IPv6访问"
+}
+
+# 函数：禁用Docker的IPv6支持
+docker_ipv6_off() {
+    # 删除daemon.json文件
+    rm -f /etc/docker/daemon.json
+
+    # 重启Docker服务以应用更改
+    docker_restart
+
+    echo "Docker已关闭IPv6访问"
 }
 
 # 卸载Docker环境
@@ -619,9 +671,14 @@ docker_manage() {
         echo "5. Dcoker网络管理 ▶"
         echo "6. Dcoker卷管理 ▶"
         echo "------------------------"				
-        echo "7. 清理无用的docker容器和镜像网络数据卷"	
+        echo "7. 清理无用的docker容器和镜像网络数据卷"
         echo "------------------------"	
-        echo "8. 卸载Dcoker环境"	
+        echo "8. 更换Dcoker源"	
+        echo "------------------------"	
+        echo "30. 开启Docker-ipv6访问"	
+        echo "31. 关闭Docker-ipv6访问"	
+        echo "------------------------"	
+        echo "50. 卸载Dcoker环境"	
         echo "------------------------"		
         echo "0. 返回主菜单"
         echo "------------------------"
@@ -631,15 +688,15 @@ docker_manage() {
             1)
                 clear
                 update_docker
-                break_end_docker
+                break_end
                 ;;
             2)
                 clear
                 if check_docker_installed; then
                     state_docker
-                    break_end_docker
+                    break_end
                 else
-                    break_end_docker
+                    break_end
                 fi
                 ;;
             3)
@@ -647,7 +704,7 @@ docker_manage() {
                 if check_docker_installed; then
                     docker_container_manage
                 else
-                    break_end_docker
+                    break_end
                 fi
                 ;;
             4)
@@ -655,7 +712,7 @@ docker_manage() {
                 if check_docker_installed; then
                     image_management
                 else
-                    break_end_docker
+                    break_end
                 fi
                 ;;
             5)
@@ -663,7 +720,7 @@ docker_manage() {
                 if check_docker_installed; then
                     network_management
                 else
-                    break_end_docker
+                    break_end
                 fi
                 ;;
             6)
@@ -671,7 +728,7 @@ docker_manage() {
                 if check_docker_installed; then
                     volume_management
                 else
-                    break_end_docker
+                    break_end
                 fi
                 ;;
             7)
@@ -679,12 +736,32 @@ docker_manage() {
                 if check_docker_installed; then
                     clean_volume_network_container
                 fi
-                break_end_docker
+                break_end
                 ;;
             8)
+                clear                
+                bash <(curl -sSL https://linuxmirrors.cn/docker.sh)
+                ;;
+            30)
+                clear   
+                if check_docker_installed; then
+                    docker_ipv6_on
+                else
+                    break_end
+                fi             
+                ;;
+            31)
+                clear
+                if check_docker_installed; then
+                    docker_ipv6_off
+                else
+                    break_end
+                fi               
+                ;;
+            50)
                 clear
                 uninstall_docker
-                break_end_docker
+                break_end
                 ;;
             0)
                 break
@@ -698,13 +775,8 @@ docker_manage() {
 
 # 主逻辑
 case "$1" in
-        install)
-	    if check_docker_installed; then
-                echo "Docker is installed."
-            else
-                echo "Docker is not installed."
-		update_docker
-            fi
+        update)
+            update_docker
             ;;
         state)
             if check_docker_installed; then
