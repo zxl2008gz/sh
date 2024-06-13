@@ -475,7 +475,7 @@ set_dns() {
     echo "------------------------"
     echo ""
     # 询问用户是否要优化DNS设置
-    read -p "是否要设置为Cloudflare和Google的DNS地址？(y/n): " choice
+    read -p "是否要设置DNS地址？(y/n): " choice
 
     if [ "$choice" == "y" ]; then
         # 定义DNS地址
