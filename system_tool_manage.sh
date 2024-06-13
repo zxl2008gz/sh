@@ -1,45 +1,23 @@
 #!/bin/bash
 
-# 确保脚本具有可执行权限
-chmod +x ~/solin.sh
-
-# 开放所有端口
-iptables_open() {
-    iptables -P INPUT ACCEPT
-    iptables -P FORWARD ACCEPT
-    iptables -P OUTPUT ACCEPT
-    iptables -F
-
-    ip6tables -P INPUT ACCEPT
-    ip6tables -P FORWARD ACCEPT
-    ip6tables -P OUTPUT ACCEPT
-    ip6tables -F
-}
+huang='\033[33m'
+bai='\033[0m'
+lv='\033[0;32m'
+lan='\033[0;34m'
+hong='\033[31m'
+lianglan='\033[96m'
+hui='\e[37m'
 
 # 函数：退出
 break_end() {
-	echo -e "\033[0;32m操作完成\033[0m"
-	echo "按任意键继续..."
-	read -n 1 -s -r -p ""
-	echo
-	clear
+    echo -e "${lv}操作完成${bai}"
+    echo "按任意键继续..."
+    read -n 1 -s -r -p ""
+    echo
+    clear
 }
 
-# 函数：询问用户确认
-ask_confirmation() {
-    local prompt="$1"
-    local choice
-
-    while true; do
-        read -p "$prompt (Y/N): " choice
-        case "$choice" in
-            [Yy]) return 0 ;;
-            [Nn]) return 1 ;;
-            *) echo "无效的选择，请输入 Y 或 N。" ;;
-        esac
-    done
-}
-
+# 定义安装软件包函数
 install() {
     if [ $# -eq 0 ]; then
         echo "未提供软件包参数!"
@@ -105,15 +83,187 @@ remove() {
     return 0
 }
 
-# 设置快捷键
+# 多后台任务
+tmux_run() {
+    # Check if the session already exists
+    tmux has-session -t $SESSION_NAME 2>/dev/null
+    # $? is a special variable that holds the exit status of the last executed command
+    if [ $? != 0 ]; then
+      # Session doesn't exist, create a new one
+      tmux new -s $SESSION_NAME
+    else
+      # Session exists, attach to it
+      tmux attach-session -t $SESSION_NAME
+    fi
+}
+
+# 工作区域
+work_area() {
+    while true; do
+        clear
+        echo "▶ 我的工作区"
+        echo "系统将为你提供10个后台运行的工作区，你可以用来执行长时间的任务"
+        echo "即使你断开SSH，工作区中的任务也不会中断，非常方便！来试试吧！"
+        echo -e "${huang}注意: 进入工作区后使用Ctrl+b再单独按d，退出工作区！${bai}"
+        echo "------------------------"
+        echo "a. 安装工作区环境"
+        echo "------------------------"
+        echo "1. 1号工作区"
+        echo "2. 2号工作区"
+        echo "3. 3号工作区"
+        echo "4. 4号工作区"
+        echo "5. 5号工作区"
+        echo "6. 6号工作区"
+        echo "7. 7号工作区"
+        echo "8. 8号工作区"
+        echo "9. 9号工作区"
+        echo "10. 10号工作区"
+        echo "------------------------"
+        echo "99. 工作区状态"
+        echo "------------------------"
+        echo "b. 卸载工作区"
+        echo "------------------------"
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            a)
+                clear
+                install tmux
+                ;;
+            b)
+                clear
+                remove tmux
+                ;;
+            1)
+                clear
+                SESSION_NAME="work1"
+                tmux_run
+                ;;
+            2)
+                clear
+                SESSION_NAME="work2"
+                tmux_run
+                ;;
+            3)
+                clear
+                SESSION_NAME="work3"
+                tmux_run
+                ;;
+            4)
+                clear
+                SESSION_NAME="work4"
+                tmux_run
+                ;;
+            5)
+                clear
+                SESSION_NAME="work5"
+                tmux_run
+                ;;
+            6)
+                clear
+                SESSION_NAME="work6"
+                tmux_run
+                ;;
+            7)
+                clear
+                SESSION_NAME="work7"
+                tmux_run
+                ;;
+            8)
+                clear
+                SESSION_NAME="work8"
+                tmux_run
+                ;;
+            9)
+                clear
+                SESSION_NAME="work9"
+                tmux_run
+                ;;
+            10)
+                clear
+                SESSION_NAME="work10"
+                tmux_run
+                ;;
+            99)
+                clear
+                tmux list-sessions
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo "无效的输入!"
+                ;;
+        esac
+    done
+}
+
+# 开放所有端口
+iptables_open() {
+    iptables -P INPUT ACCEPT
+    iptables -P FORWARD ACCEPT
+    iptables -P OUTPUT ACCEPT
+    iptables -F
+
+    ip6tables -P INPUT ACCEPT
+    ip6tables -P FORWARD ACCEPT
+    ip6tables -P OUTPUT ACCEPT
+    ip6tables -F
+}
+
+# 函数：询问用户确认
+ask_confirmation() {
+    local prompt="$1"
+    local choice
+
+    while true; do
+        read -p "$prompt (Y/N): " choice
+        case "$choice" in
+            [Yy]) return 0 ;;
+            [Nn]) return 1 ;;
+            *) echo "无效的选择，请输入 Y 或 N。" ;;
+        esac
+    done
+}
+
+#设置快捷键
 set_shortcut_keys() {
-    read -n 1 -p "请输入你的快捷按键: " kuaijiejian
-    echo
-    # 添加完整的命令路径以避免任何混淆
-    echo "alias $kuaijiejian='bash ~/solin.sh'" >> ~/.bashrc
-    # 提示用户手动source或重启终端
-    source ~/.bashrc
-    echo "快捷键已设置。"
+    clear
+
+    # 指定要替换的旧别名名称
+    old_alias=$(grep "alias [^=]*='~/solin.sh'" ~/.bashrc | awk -F"=" '{print $1}' | awk '{print $2}')
+
+    # 从 .bashrc 文件中获取指定别名的完整设置
+    current_alias_line=$(grep "alias $old_alias=" ~/.bashrc)
+
+    # 如果找到别名设置
+    if [ -n "$current_alias_line" ]; then
+        # 获取用户输入的新别名名称
+        read -p "请输入新的别名名称 (当前别名为 $old_alias): " new_alias
+
+        # 备份当前的 .bashrc 文件
+        cp ~/.bashrc ~/.bashrc.bak
+
+        # 使用 sed 命令替换指定的别名设置
+        escaped_old_alias=$(printf '%s\n' "$old_alias" | sed 's/[\/&]/\\&/g;$!s/$/\\/')
+        escaped_new_alias=$(printf '%s\n' "$new_alias" | sed 's/[\/&]/\\&/g;$!s/$/\\/')
+        sed "s/alias $escaped_old_alias='~\/solin.sh'/alias $escaped_new_alias='~\/solin.sh'/" ~/.bashrc.bak > ~/.bashrc
+
+        echo "原有的别名 '$old_alias' 已更新为 '$new_alias'，请使用新的快捷键！"
+
+        # 重新加载 .bashrc 以使新设置生效
+        exec "$SHELL"        
+    else
+        echo "未找到名为 '$old_alias' 的别名设置"
+    fi
+
+}
+
+solin() {
+    kjjian
+    exit
 }
 
 # 设置root密码
@@ -144,6 +294,11 @@ set_rootpasswd() {
             echo "安装已取消。"
         fi
     done
+}
+
+root_use() {
+    clear
+    [ "$EUID" -ne 0 ] && echo -e "${huang}请注意，该功能需要root用户才能运行！${bai}" && break_end && solin
 }
 
 # 安装Python最新版
@@ -238,9 +393,26 @@ install_python() {
     cd /root/ && rm -rf Python-${PY_VERSION}.tgz && rm -rf Python-${PY_VERSION}
 }
 
+#重启 SSH 服务
+restart_ssh() {
+
+    if command -v dnf &>/dev/null; then
+        systemctl restart sshd
+    elif command -v yum &>/dev/null; then
+        systemctl restart sshd
+    elif command -v apt &>/dev/null; then
+        service ssh restart
+    elif command -v apk &>/dev/null; then
+        service sshd restart
+    else
+        echo "未知的包管理器!"
+        return 1
+    fi
+
+}
+
 # 修改SSH端口
 modify_ssh_port() {
-    #!/bin/bash
 
     # 去掉 #Port 的注释
     sed -i 's/#Port/Port/' /etc/ssh/sshd_config
@@ -263,13 +435,36 @@ modify_ssh_port() {
     sed -i "s/Port [0-9]\+/Port $new_port/g" /etc/ssh/sshd_config
 
     # 重启 SSH 服务
-    service sshd restart
+    restart_ssh
 
     echo "SSH 端口已修改为: $new_port"
 
     clear
     iptables_open
     remove iptables-persistent ufw firewalld iptables-services > /dev/null 2>&1
+}
+
+#DNS配置
+dns_config(){
+    # 检查机器是否有IPv6地址
+    ipv6_available=0
+    if [[ $(ip -6 addr | grep -c "inet6") -gt 0 ]]; then
+        ipv6_available=1
+    fi
+
+    echo "nameserver $dns1_ipv4" > /etc/resolv.conf
+    echo "nameserver $dns2_ipv4" >> /etc/resolv.conf
+
+
+    if [[ $ipv6_available -eq 1 ]]; then
+        echo "nameserver $dns1_ipv6" >> /etc/resolv.conf
+        echo "nameserver $dns2_ipv6" >> /etc/resolv.conf
+    fi
+
+    echo "DNS地址已更新"
+    echo "------------------------"
+    cat /etc/resolv.conf
+    echo "------------------------"
 }
 
 # 优化DNS
@@ -284,51 +479,47 @@ set_dns() {
 
     if [ "$choice" == "y" ]; then
         # 定义DNS地址
-        cloudflare_ipv4="1.1.1.1"
-        google_ipv4="8.8.8.8"
-        cloudflare_ipv6="2606:4700:4700::1111"
-        google_ipv6="2001:4860:4860::8888"
+        read -p "1. 国外DNS优化    2. 国内DNS优化    0. 退出  : " Limiting
 
-        # 检查机器是否有IPv6地址
-        ipv6_available=0
-        if [[ $(ip -6 addr | grep -c "inet6") -gt 0 ]]; then
-            ipv6_available=1
-        fi
+        case "$Limiting" in
+            1)
+                dns1_ipv4="1.1.1.1"
+                dns2_ipv4="8.8.8.8"
+                dns1_ipv6="2606:4700:4700::1111"
+                dns2_ipv6="2001:4860:4860::8888"
+                dns_config
+                ;;
 
-        # 设置DNS地址为Cloudflare和Google（IPv4和IPv6）
-        echo "设置DNS为Cloudflare和Google"
-
-        # 设置IPv4地址
-        echo "nameserver $cloudflare_ipv4" > /etc/resolv.conf
-        echo "nameserver $google_ipv4" >> /etc/resolv.conf
-
-        # 如果有IPv6地址，则设置IPv6地址
-        if [[ $ipv6_available -eq 1 ]]; then
-            echo "nameserver $cloudflare_ipv6" >> /etc/resolv.conf
-            echo "nameserver $google_ipv6" >> /etc/resolv.conf
-        fi
-
-        echo "DNS地址已更新"
-        echo "------------------------"
-        cat /etc/resolv.conf
-        echo "------------------------"
+            2)
+                dns1_ipv4="223.5.5.5"
+                dns2_ipv4="183.60.83.19"
+                dns1_ipv6="2400:3200::1"
+                dns2_ipv6="2400:da00::6666"
+                dns_config
+                ;;
+            0)
+                echo "已取消"
+                ;;
+            *)
+                echo "无效的选择，请输入 Y 或 N。"
+                ;;
+        esac    
     else
         echo "DNS设置未更改"
     fi
 }
 
 # DD系统1
-dd_xitong_1() {    
-    read -p "请输入你重装后的密码: " vpspasswd
-    echo "任意键继续，重装后初始用户名: root  初始密码: $vpspasswd  初始端口: 22"
+dd_xitong_1() {
+    echo -e "重装后初始用户名: ${huang}root${bai}  初始密码: ${huang}LeitboGi0ro${bai}  初始端口: ${huang}22${bai}"
     read -n 1 -s -r -p ""
     install wget
-    bash <(wget --no-check-certificate -qO- 'https://raw.githubusercontent.com/MoeClub/Note/master/InstallNET.sh') $xitong -v 64 -p $vpspasswd -port 22
+    wget --no-check-certificate -qO InstallNET.sh 'https://raw.githubusercontent.com/leitbogioro/Tools/master/Linux_reinstall/InstallNET.sh' && chmod a+x InstallNET.sh
 }
 
 # DD系统2
 dd_xitong_2() {
-    echo "任意键继续，重装后初始用户名: root  初始密码: LeitboGi0ro  初始端口: 22"
+    echo -e "重装后初始用户名: ${huang}Administrator${bai}  初始密码: ${huang}Teddysun.com${bai}  初始端口: ${huang}3389${bai}"
     read -n 1 -s -r -p ""
     install wget
     wget --no-check-certificate -qO InstallNET.sh 'https://raw.githubusercontent.com/leitbogioro/Tools/master/Linux_reinstall/InstallNET.sh' && chmod a+x InstallNET.sh
@@ -336,10 +527,18 @@ dd_xitong_2() {
 
 # DD系统3
 dd_xitong_3() {
-    echo "任意键继续，重装后初始用户名: Administrator  初始密码: Teddysun.com  初始端口: 3389"
+    echo -e "重装后初始用户名: ${huang}root${bai}  初始密码: ${huang}123@@@${bai}  初始端口: ${huang}22${bai}"
+    echo -e "按任意键继续..."
     read -n 1 -s -r -p ""
-    install wget
-    wget --no-check-certificate -qO InstallNET.sh 'https://raw.githubusercontent.com/leitbogioro/Tools/master/Linux_reinstall/InstallNET.sh' && chmod a+x InstallNET.sh
+    curl -O https://raw.githubusercontent.com/bin456789/reinstall/main/reinstall.sh
+}
+
+# DD系统4
+dd_xitong_4() {
+    echo -e "重装后初始用户名: ${huang}Administrator${bai}  初始密码: ${huang}123@@@${bai}  初始端口: ${huang}3389${bai}"
+    echo -e "按任意键继续..."
+    read -n 1 -s -r -p ""
+    curl -O https://raw.githubusercontent.com/bin456789/reinstall/main/reinstall.sh
 }
 
 # DD系统
@@ -368,119 +567,133 @@ DD_xitong() {
                 echo "22. CentOS 8"
                 echo "23. CentOS 7"
                 echo "------------------------"
-                echo "31. Alpine 3.19"
+                echo "31. Alpine Lunix"
                 echo "------------------------"
                 echo "41. Windows 11"
                 echo "42. Windows 10"
-                echo "43. Windows Server 2022"
-                echo "44. Windows Server 2019"
-                echo "44. Windows Server 2016"
+                echo "43. Windows 7"
+                echo "44. Windows Server 2022"
+                echo "45. Windows Server 2019"
+                echo "46. Windows Server 2016"
                 echo "------------------------"
                 read -p "请选择要重装的系统: " sys_choice
 
                 case "$sys_choice" in
                     1)
-                        xitong="-d 12"
                         dd_xitong_1
-                        exit
+                        bash InstallNET.sh -debian 12
                         reboot
+                        exit
                         ;;
                     2)
-                        xitong="-d 11"
                         dd_xitong_1
+                        bash InstallNET.sh -debian 11
                         reboot
                         exit
                         ;;
                     3)
-                        xitong="-d 10"
                         dd_xitong_1
+                        bash InstallNET.sh -debian 10
                         reboot
                         exit
                         ;;
                     4)
-                        xitong="-d 9"
                         dd_xitong_1
+                        bash InstallNET.sh -debian 9
                         reboot
                         exit
                         ;;
                     11)
-                        dd_xitong_2
+                        dd_xitong_1
                         bash InstallNET.sh -ubuntu 24.04
                         reboot
                         exit
                         ;;
                     12)
-                        dd_xitong_2
+                        dd_xitong_1
                         bash InstallNET.sh -ubuntu 22.04
                         reboot
                         exit
                         ;;
                     13)
-                        xitong="-u 20.04"
                         dd_xitong_1
+                        bash InstallNET.sh -ubuntu 20.04
                         reboot
                         exit
                         ;;
                     14)
-                        xitong="-u 18.04"
                         dd_xitong_1
+                        bash InstallNET.sh -ubuntu 18.04
                         reboot
                         exit
                         ;;
                     21)
-                        dd_xitong_2
+                        dd_xitong_1
                         bash InstallNET.sh -centos 9
                         reboot
                         exit
                         ;;
                     22)
-                        dd_xitong_2
+                        dd_xitong_1
                         bash InstallNET.sh -centos 8
                         reboot
                         exit
                         ;;   
                     23)
-                        dd_xitong_2
+                        dd_xitong_1
                         bash InstallNET.sh -centos 7
                         reboot
                         exit
                         ;;
                     31)
-                        dd_xitong_2
+                        dd_xitong_1
                         bash InstallNET.sh -alpine
                         reboot
                         exit
                         ;;
                     41)
-                        dd_xitong_3
+                        dd_xitong_2
                         bash InstallNET.sh -windows 11 -lang "cn"
                         reboot
                         exit
                         ;;
                     42)
-                        dd_xitong_3
+                        dd_xitong_2
                         bash InstallNET.sh -windows 10 -lang "cn"
                         reboot
                         exit
                         ;;
                     43)
-                        dd_xitong_3
-                        bash InstallNET.sh -windows 2022 -lang "cn"
+                        dd_xitong_4
+                        URL="https://massgrave.dev/windows_7_links"
+                        web_content=$(wget -q -O - "$URL")
+                        iso_link=$(echo "$web_content" | grep -oP '(?<=href=")[^"]*cn[^"]*windows_7[^"]*professional[^"]*x64[^"]*\.iso')
+                        bash reinstall.sh windows --iso="$iso_link" --image-name='Windows 7 PROFESSIONAL'
+
                         reboot
                         exit
                         ;;
                     44)
-                        dd_xitong_3
-                        bash InstallNET.sh -windows 2019 -lang "cn"
+                        dd_xitong_4
+                        URL="https://massgrave.dev/windows_server_links"
+                        web_content=$(wget -q -O - "$URL")
+                        iso_link=$(echo "$web_content" | grep -oP '(?<=href=")[^"]*cn[^"]*windows_server[^"]*2022[^"]*x64[^"]*\.iso')
+                        bash reinstall.sh windows --iso="$iso_link" --image-name='Windows Server 2022 SERVERDATACENTER'
                         reboot
                         exit
                         ;;
                     45)
-                        dd_xitong_3
+                        dd_xitong_2
+                        bash InstallNET.sh -windows 2019 -lang "cn"
+                        reboot
+                        exit
+                        ;;
+                    46)
+                        dd_xitong_2
                         bash InstallNET.sh -windows 2016 -lang "cn"
                         reboot
                         exit
-                        ;;                    
+                        ;;                 
                     *)
                         echo "无效的选择，请重新输入。"
                         ;;
@@ -633,6 +846,7 @@ modify_swap() {
 # 用户管理
 user_management() {
      while true; do
+        root_use
         clear
         install sudo
         clear
@@ -712,7 +926,7 @@ user_management() {
     done
 }
 
-# 密码生成器
+# 用户/密码生成器
 password_generator() {
     echo "随机用户名"
     echo "------------------------"
@@ -1040,8 +1254,6 @@ EOF
                     remove iptables-persistent
                     rm /etc/iptables/rules.v4
                     break
-                    # echo "防火墙已卸载，重启生效"
-                    # reboot
                     ;;
 
                 0)
@@ -1366,7 +1578,7 @@ scheduled_tasks() {
         echo ""
         echo "操作"
         echo "------------------------"
-        echo "1. 添加定时任务              2. 删除定时任务"
+        echo "1. 添加定时任务              2. 删除定时任务                  3. 编辑定时任务"
         echo "------------------------"
         echo "0. 返回上一级选单"
         echo "------------------------"
@@ -1376,17 +1588,26 @@ scheduled_tasks() {
             1)
                 read -p "请输入新任务的执行命令: " newquest
                 echo "------------------------"
-                echo "1. 每周任务                 2. 每天任务"
+                echo "1. 每月任务                 2. 每周任务"
+                echo "3. 每天任务                 4. 每小时任务"
                 read -p "请输入你的选择: " dingshi
 
                 case $dingshi in
                     1)
+                        read -p "选择每月的几号执行任务？ (1-30): " day
+                        (crontab -l ; echo "0 0 $day * * $newquest") | crontab - > /dev/null 2>&1
+                        ;;
+                    2)
                         read -p "选择周几执行任务？ (0-6，0代表星期日): " weekday
                         (crontab -l ; echo "0 0 * * $weekday $newquest") | crontab - > /dev/null 2>&1
                         ;;
-                    2)
+                    3)
                         read -p "选择每天几点执行任务？（小时，0-23）: " hour
                         (crontab -l ; echo "0 $hour * * * $newquest") | crontab - > /dev/null 2>&1
+                        ;;
+                    4)
+                        read -p "输入每小时的第几分钟执行任务？（分钟，0-60）: " minute
+                        (crontab -l ; echo "$minute * * * * $newquest") | crontab - > /dev/null 2>&1
                         ;;
                     *)
                         break  # 跳出
@@ -1396,6 +1617,9 @@ scheduled_tasks() {
             2)
                 read -p "请输入需要删除任务的关键字: " kquest
                 crontab -l | grep -v "$kquest" | crontab -
+                ;;
+            3)
+                crontab -e
                 ;;
             0)
                 break  # 跳出循环，退出菜单
@@ -1407,6 +1631,385 @@ scheduled_tasks() {
         esac
     done
 }
+
+#hosts解析列表
+host_resolution(){
+    while true; do
+        echo "本机host解析列表"
+        echo "如果你在这里添加解析匹配，将不再使用动态解析了"
+        cat /etc/hosts
+        echo ""
+        echo "操作"
+        echo "------------------------"
+        echo "1. 添加新的解析              2. 删除解析地址"
+        echo "------------------------"
+        echo "0. 返回上一级选单"
+        echo "------------------------"
+        read -p "请输入你的选择: " host_dns
+
+        case $host_dns in
+            1)
+                read -p "请输入新的解析记录 格式: 110.25.5.33 solin.pro : " addhost
+                echo "$addhost" >> /etc/hosts
+
+                ;;
+            2)
+                read -p "请输入需要删除的解析内容关键字: " delhost
+                sed -i "/$delhost/d" /etc/hosts
+                ;;
+            0)
+                break  # 跳出循环，退出菜单
+                ;;
+
+            *)
+                break  # 跳出循环，退出菜单
+                ;;
+        esac
+    done
+}
+
+#f2b_sshd
+f2b_sshd() {
+    if grep -q 'Alpine' /etc/issue; then
+        xxx=alpine-sshd
+        f2b_status_xxx
+    elif grep -qi 'CentOS' /etc/redhat-release; then
+        xxx=centos-sshd
+        f2b_status_xxx
+    else
+        xxx=linux-sshd
+        f2b_status_xxx
+    fi
+}
+
+f2b_status_xxx() {
+    docker exec -it fail2ban fail2ban-client status $xxx
+}
+
+
+f2b_status() {
+     docker restart fail2ban
+     sleep 3
+     docker exec -it fail2ban fail2ban-client status
+}
+
+#fail2ban安装
+f2b_install_sshd() {
+
+    docker run -d \
+        --name=fail2ban \
+        --net=host \
+        --cap-add=NET_ADMIN \
+        --cap-add=NET_RAW \
+        -e PUID=1000 \
+        -e PGID=1000 \
+        -e TZ=Etc/UTC \
+        -e VERBOSITY=-vv \
+        -v /path/to/fail2ban/config:/config \
+        -v /var/log:/var/log:ro \
+        -v /home/web/log/nginx/:/remotelogs/nginx:ro \
+        --restart unless-stopped \
+        lscr.io/linuxserver/fail2ban:latest
+
+    sleep 3
+    if grep -q 'Alpine' /etc/issue; then
+        cd /path/to/fail2ban/config/fail2ban/filter.d
+        curl -sS -O https://raw.githubusercontent.com/kejilion/config/main/fail2ban/alpine-sshd.conf
+        curl -sS -O https://raw.githubusercontent.com/kejilion/config/main/fail2ban/alpine-sshd-ddos.conf
+        cd /path/to/fail2ban/config/fail2ban/jail.d/
+        curl -sS -O https://raw.githubusercontent.com/kejilion/config/main/fail2ban/alpine-ssh.conf
+    elif grep -qi 'CentOS' /etc/redhat-release; then
+        cd /path/to/fail2ban/config/fail2ban/jail.d/
+        curl -sS -O https://raw.githubusercontent.com/kejilion/config/main/fail2ban/centos-ssh.conf
+    else
+        install rsyslog
+        systemctl start rsyslog
+        systemctl enable rsyslog
+        cd /path/to/fail2ban/config/fail2ban/jail.d/
+        curl -sS -O https://raw.githubusercontent.com/kejilion/config/main/fail2ban/linux-ssh.conf
+    fi
+}
+
+# 检查Docker是否安装
+check_docker_installed() {
+    if ! command -v docker &>/dev/null; then
+        echo "Docker 未安装。"
+        return 1
+    fi
+}
+
+# 定义安装更新 Docker 的函数
+update_docker() {
+    if [ -f "/etc/alpine-release" ]; then
+        # 更新软件包索引
+        apk update
+
+        # 安装一个更完整的内核版本
+        # apk add linux-lts
+
+        # 安装 Docker
+        apk add docker
+
+        # 将 Docker 添加到默认运行级别并启动
+        rc-update add docker default
+        Limit_log
+        service docker start || rc-service docker start
+
+        # 安装 Docker Compose
+        apk add docker-compose
+
+    else
+        # 其他 Linux 发行版，使用 Docker 的官方安装脚本
+        curl -fsSL https://get.docker.com | sh
+
+        # Docker Compose 需要单独安装，这里使用 Linux 的通用安装方法
+        # 注意：这里需要检查 Docker Compose 的官方GitHub仓库以获得最新安装步骤
+        LATEST_COMPOSE=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+        curl -L "https://github.com/docker/compose/releases/download/${LATEST_COMPOSE}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+
+        # 为了兼容性，检查是否安装了 systemctl，如果是则启动并使能 Docker 服务
+        if command -v systemctl &>/dev/null; then
+            systemctl start docker
+            systemctl enable docker
+            Limit_log  
+        fi
+    fi
+
+    sleep 2
+}
+
+#fail2ban防御程序
+fail2ban_defense(){
+    if docker inspect fail2ban &>/dev/null ; then
+        while true; do
+            clear
+            echo "SSH防御程序已启动"
+            echo "------------------------"
+            echo "1. 查看SSH拦截记录"
+            echo "2. 日志实时监控"
+            echo "------------------------"
+            echo "9. 卸载防御程序"
+            echo "------------------------"
+            echo "0. 退出"
+            echo "------------------------"
+            read -p "请输入你的选择: " sub_choice
+            case $sub_choice in
+                1)
+                    echo "------------------------"
+                    f2b_sshd
+                    echo "------------------------"
+                    ;;
+                2)
+                    tail -f /path/to/fail2ban/config/log/fail2ban/fail2ban.log
+                    break
+                    ;;
+                9)
+                    docker rm -f fail2ban
+                    rm -rf /path/to/fail2ban
+                    echo "Fail2Ban防御程序已卸载"
+                    break
+                    ;;
+                0)
+                    break
+                    ;;
+                *)
+                    echo "无效的选择，请重新输入。"
+                    ;;
+            esac
+            break_end
+
+        done
+
+    elif [ -x "$(command -v fail2ban-client)" ] ; then
+        clear
+        echo "卸载旧版fail2ban"
+        read -p "确定继续吗？(Y/N): " choice
+        case "$choice" in
+            [Yy])
+                remove fail2ban
+                rm -rf /etc/fail2ban
+                echo "Fail2Ban防御程序已卸载"
+                ;;
+            [Nn])
+                echo "已取消"
+                ;;
+            *)
+                echo "无效的选择，请输入 Y 或 N。"
+                ;;
+        esac
+
+    else
+
+        clear
+        echo "fail2ban是一个SSH防止暴力破解工具"
+        echo "官网介绍: https://github.com/fail2ban/fail2ban"
+        echo "------------------------------------------------"
+        echo "工作原理：研判非法IP恶意高频访问SSH端口，自动进行IP封锁"
+        echo "------------------------------------------------"
+        read -p "确定继续吗？(Y/N): " choice
+
+        case "$choice" in
+        [Yy])
+            clear
+            if check_docker_installed; then
+                echo "Docker is installed."
+            else
+                update_docker
+            fi
+            f2b_install_sshd
+
+            cd ~
+            f2b_status
+            echo "Fail2Ban防御程序已开启"
+
+            ;;
+        [Nn])
+            echo "已取消"
+            ;;
+        *)
+            echo "无效的选择，请输入 Y 或 N。"
+            ;;
+        esac
+    fi
+}
+
+#流量输出
+output_status() {
+    output=$(awk 'BEGIN { rx_total = 0; tx_total = 0 }
+        NR > 2 { rx_total += $2; tx_total += $10 }
+        END {
+            rx_units = "Bytes";
+            tx_units = "Bytes";
+            if (rx_total > 1024) { rx_total /= 1024; rx_units = "KB"; }
+            if (rx_total > 1024) { rx_total /= 1024; rx_units = "MB"; }
+            if (rx_total > 1024) { rx_total /= 1024; rx_units = "GB"; }
+
+            if (tx_total > 1024) { tx_total /= 1024; tx_units = "KB"; }
+            if (tx_total > 1024) { tx_total /= 1024; tx_units = "MB"; }
+            if (tx_total > 1024) { tx_total /= 1024; tx_units = "GB"; }
+
+            printf("总接收: %.2f %s\n总发送: %.2f %s\n", rx_total, rx_units, tx_total, tx_units);
+        }' /proc/net/dev)
+
+}
+
+#限流自动关机
+limit_shutdown(){
+    echo "当前流量使用情况，重启服务器流量计算会清零！"
+    output_status
+    echo "$output"
+
+    # 检查是否存在 Limiting_Shut_down.sh 文件
+    if [ -f ~/Limiting_Shut_down.sh ]; then
+        # 获取 threshold_gb 的值
+        threshold_gb=$(grep -oP 'threshold_gb=\K\d+' ~/Limiting_Shut_down.sh)
+        echo -e "当前设置的限流阈值为 ${hang}${threshold_gb}${bai}GB"
+    else
+        echo -e "${hui}前未启用限流关机功能${bai}"
+    fi
+
+    echo
+    echo "------------------------------------------------"
+    echo "系统每分钟会检测实际流量是否到达阈值，到达后会自动关闭服务器！每月1日重置流量重启服务器。"
+    read -p "1. 开启限流关机功能    2. 停用限流关机功能    0. 退出  : " Limiting
+
+    case "$Limiting" in
+        1)
+            # 输入新的虚拟内存大小
+            echo "如果实际服务器就100G流量，可设置阈值为95G，提前关机，以免出现流量误差或溢出."
+            read -p "请输入流量阈值（单位为GB）: " threshold_gb
+            cd ~
+            curl -Ss -O https://raw.githubusercontent.com/zxl2008gz/sh/main/Limiting_Shut_down.sh
+            chmod +x ~/Limiting_Shut_down.sh
+            sed -i "s/110/$threshold_gb/g" ~/Limiting_Shut_down.sh
+            crontab -l | grep -v '~/Limiting_Shut_down.sh' | crontab -
+            (crontab -l ; echo "* * * * * ~/Limiting_Shut_down.sh") | crontab - > /dev/null 2>&1
+            crontab -l | grep -v 'reboot' | crontab -
+            (crontab -l ; echo "0 1 1 * * reboot") | crontab - > /dev/null 2>&1
+            echo "限流关机已设置"
+
+            ;;
+        0)
+            echo "已取消"
+            ;;
+        2)
+            crontab -l | grep -v '~/Limiting_Shut_down.sh' | crontab -
+            crontab -l | grep -v 'reboot' | crontab -
+            rm ~/Limiting_Shut_down.sh
+            echo "已关闭限流关机功能"
+            ;;
+        *)
+            echo "无效的选择，请输入 Y 或 N。"
+            ;;
+    esac
+}
+
+# 函数: 获取IP地址
+get_ip_address() {
+    local ipv4_address ipv6_address
+
+    # 尝试获取 IPv4 地址
+    ipv4_address=$(curl -s ipv4.ip.sb 2>/dev/null || echo "Unknown")
+    if [ "$ipv4_address" = "Unknown" ]; then
+        ipv4_address=""
+    fi
+    # 尝试获取 IPv6 地址
+    ipv6_address=$(curl -s --max-time 1 ipv6.ip.sb 2>/dev/null || echo "Unknown")
+    if [ "$ipv6_address" = "Unknown" ]; then
+        ipv6_address=""
+    fi    
+    # 输出 IPv4 和 IPv6 地址
+    echo "$ipv4_address $ipv6_address"
+}
+
+#ssh私钥
+add_sshkey() {
+
+    # ssh-keygen -t rsa -b 4096 -C "xxxx@gmail.com" -f /root/.ssh/sshkey -N ""
+    ssh-keygen -t ed25519 -C "xxxx@gmail.com" -f /root/.ssh/sshkey -N ""
+
+    cat ~/.ssh/sshkey.pub >> ~/.ssh/authorized_keys
+    chmod 600 ~/.ssh/authorized_keys
+
+    # 获取IP地址
+    read ipv4_address ipv6_address < <(get_ip_address)
+
+    echo -e "私钥信息已生成，务必复制保存，可保存成 ${huang}${ipv4_address}_ssh.key${bai} 文件，用于以后的SSH登录"
+
+    echo "--------------------------------"
+    cat ~/.ssh/sshkey
+    echo "--------------------------------"
+
+    sed -i -e 's/^\s*#\?\s*PermitRootLogin .*/PermitRootLogin prohibit-password/' \
+        -e 's/^\s*#\?\s*PasswordAuthentication .*/PasswordAuthentication no/' \
+        -e 's/^\s*#\?\s*PubkeyAuthentication .*/PubkeyAuthentication yes/' \
+        -e 's/^\s*#\?\s*ChallengeResponseAuthentication .*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+    rm -rf /etc/ssh/sshd_config.d/* /etc/ssh/ssh_config.d/*
+    echo -e "${lv}ROOT私钥登录已开启，已关闭ROOT密码登录，重连将会生效${bai}"
+
+}
+
+#ROOT私钥登录模式
+root_key(){
+    echo "ROOT私钥登录模式"
+    echo "------------------------------------------------"
+    echo "将会生成密钥对，更安全的方式SSH登录"
+    read -p "确定继续吗？(Y/N): " choice
+
+    case "$choice" in
+    [Yy])
+        clear
+        add_sshkey
+        ;;
+    [Nn])
+        echo "已取消"
+        ;;
+    *)
+        echo "无效的选择，请输入 Y 或 N。"
+        ;;
+    esac
+    }
 
 # 系统工具
 system_tool() {
@@ -1434,7 +2037,12 @@ system_tool() {
         echo "17. 防火墙高级管理器"
         echo "18. 修改主机名"
         echo "19. 切换系统更新源"
-        echo -e "20. 定时任务管理 \033[33mNEW\033[0m"
+        echo -e "20. 定时任务管理 ${huang}NEW${bai}"
+        echo "------------------------"
+        echo "21. 本机host解析"
+        echo "22. fail2banSSH防御程序"
+        echo "23. 限流自动关机"
+        echo "24. ROOT私钥登录模式"
         echo "------------------------"
         echo "99. 重启服务器"
         echo "------------------------"
@@ -1456,16 +2064,19 @@ system_tool() {
                 ;;
             3)
                 clear
+                root_use
                 set_rootpasswd
                 break_end
                 ;;
             4)
                 clear
+                root_use
                 install_python
                 break_end
                 ;;
             5)
                 clear
+                root_use
                 iptables_open
                 remove iptables-persistent ufw firewalld iptables-services > /dev/null 2>&1
                 echo "端口已全部开放"
@@ -1473,11 +2084,13 @@ system_tool() {
                 ;;
             6)
                 clear
+                root_use
                 modify_ssh_port
                 break_end
                 ;;
             7)
                 clear
+                root_use
                 set_dns
                 break_end
                 ;;
@@ -1487,11 +2100,13 @@ system_tool() {
                 ;;  
             9)
                 clear
+                root_use
                 create_new_user
                 break_end
                 ;;  
             10)
                 clear
+                root_use
                 switch_ipv4_ipv6
                 break_end
                 ;;   
@@ -1501,6 +2116,7 @@ system_tool() {
                 break_end
                 ;;
             12)
+                root_use
                 modify_swap
                 break_end
                 ;;
@@ -1514,28 +2130,54 @@ system_tool() {
                 break_end
                 ;;
             15)
+                root_use
                 set_time_zone
                 ;;
             16)
+                root_use
                 update_bbr3
                 break_end
                 ;;
             17)
+                root_use
                 ufw_manage
                 break_end
                 ;;
             18)
                 clear
+                root_use
                 modify_hostname
                 break_end
                 ;;
             19)
+                root_use
                 get_current_source
                 update_source
                 break_end
                 ;;
             20)
+                root_use
                 scheduled_tasks
+                break_end
+                ;;
+            21)
+                root_use
+                host_resolution
+                break_end
+                ;;
+            22)
+                root_use
+                fail2ban_defense
+                break_end
+                ;;
+            23)
+                root_use
+                limit_shutdown
+                break_end
+                ;;
+            24)
+                root_use
+                root_key
                 break_end
                 ;;
             99)
@@ -1552,4 +2194,15 @@ system_tool() {
     done
 }
 
-system_tool
+# 主逻辑
+case "$1" in
+        work)
+            work_area
+            ;;
+        tool)
+            system_tool
+            ;;
+        *)
+            echo "Usage: $0 {work|tool}"
+            exit 1
+    esac
