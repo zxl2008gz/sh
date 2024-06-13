@@ -2790,7 +2790,7 @@ system_info_path(){
     cd ~ || exit
 
     # 下载并使脚本可执行
-    #curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/system_info.sh
+    curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/system_info.sh
     chmod +x system_info.sh
 }
 
@@ -2846,7 +2846,7 @@ gcp_script(){
 docker_script_path() {
     # 切换到一个一致的目录（例如，家目录）
     cd ~ || exit
-    #curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/docker_manage_info.sh
+    curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/docker_manage_info.sh
     chmod +x docker_manage_info.sh
 }
 
@@ -2860,7 +2860,7 @@ docker_manage() {
 db_script_path() {
     # 切换到一个一致的目录（例如，家目录）
     cd ~ || exit
-    #curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/mysql_db_manager.sh
+    curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/mysql_db_manager.sh
     chmod +x mysql_db_manager.sh
 }
 
@@ -2908,7 +2908,7 @@ warp_manage() {
 tool_script_path() {
     # 切换到一个一致的目录（例如，家目录）
     cd ~ || exit
-    #curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/system_tool_manage.sh
+    curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/system_tool_manage.sh
     chmod +x system_tool_manage.sh
 }
 
