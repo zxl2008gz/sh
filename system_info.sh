@@ -1,12 +1,35 @@
 #!/bin/bash
 
+huang='\033[33m'
+bai='\033[0m'
+lv='\033[0;32m'
+lan='\033[0;34m'
+hong='\033[31m'
+lianglan='\033[96m'
+hui='\e[37m'
+
 # 函数：退出
 break_end() {
-    echo -e "\033[0;32m操作完成\033[0m"
+    echo -e "${lv}操作完成${bai}"
     echo "按任意键继续..."
     read -n 1 -s -r -p ""
     echo
     clear
+}
+
+# 函数：询问用户确认
+ask_confirmation() {
+    local prompt="$1"
+    local choice
+
+    while true; do
+        read -p "$prompt (Y/N): " choice
+        case "$choice" in
+            [Yy]) return 0 ;;
+            [Nn]) return 1 ;;
+            *) echo "无效的选择，请输入 Y 或 N。" ;;
+        esac
+    done
 }
 
 install() {
@@ -484,6 +507,532 @@ common_tool_install() {
 
 }
 
+# 设置或移除BBR
+configure_bbr() {
+    local enable=$1  # 传入 'enable' 或 'disable'
+    if [ "$enable" = "enable" ]; then
+        cat > /etc/sysctl.conf << EOF
+net.core.default_qdisc=fq_pie
+net.ipv4.tcp_congestion_control=bbr
+EOF
+    elif [ "$enable" = "disable" ]; then
+        sed -i '/net.core.default_qdisc=fq_pie/d' /etc/sysctl.conf
+        sed -i '/net.ipv4.tcp_congestion_control=bbr/d' /etc/sysctl.conf
+    fi
+    sysctl -p
+}
+
+# BBR脚本
+bbr_script() {
+    clear
+    if [ -f "/etc/alpine-release" ]; then
+        while true; do
+            clear
+            local congestion_algorithm=$(sysctl -n net.ipv4.tcp_congestion_control)
+            local queue_algorithm=$(sysctl -n net.core.default_qdisc)
+            echo "当前TCP阻塞算法: $congestion_algorithm $queue_algorithm"
+
+            echo ""
+            echo "BBR管理"
+            echo "------------------------"
+            echo "1. 开启BBRv3              2. 关闭BBRv3（会重启）"
+            echo "------------------------"
+            echo "0. 返回上一级选单"
+            echo "------------------------"
+            read -p "请输入你的选择: " sub_choice
+
+            case $sub_choice in
+                1)
+                    configure_bbr enable
+                    ;;
+                2)
+                    configure_bbr disable
+                    reboot
+                    ;;
+                0)
+                    break
+                    ;;
+                *)
+                    break
+                    ;;
+            esac
+        done
+    else
+        install wget
+        wget --no-check-certificate -O tcpx.sh https://raw.githubusercontent.com/ylx2016/Linux-NetSpeed/master/tcpx.sh
+        chmod +x tcpx.sh
+        ./tcpx.sh
+    fi
+}
+
+# 设置虚拟内存
+add_swap() {
+    local new_swap_size="$1"  # 新的 swap 文件大小（以 MB 为单位）
+
+    if [[ -z "$new_swap_size" || ! "$new_swap_size" =~ ^[0-9]+$ ]]; then
+        echo "错误：请提供一个有效的数字作为 swap 大小（以 MB 为单位）。" 
+        return 1
+    fi
+
+    echo "正在禁用并清理现有的 swap 分区..."
+    local swap_partitions=$(grep -E '^/dev/' /proc/swaps | awk '{print $1}')
+    for partition in $swap_partitions; do
+        swapoff "$partition" && wipefs -a "$partition" && mkswap -f "$partition"
+    done
+
+    echo "正在处理 /swapfile..."
+    swapoff /swapfile 2>/dev/null
+    rm -f /swapfile
+
+    echo "创建新的 swap 文件，大小为 ${new_swap_size}MB..."
+    dd if=/dev/zero of=/swapfile bs=1M count=$new_swap_size status=progress
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+
+    if [ -f /etc/alpine-release ]; then
+        echo "为 Alpine Linux 配置 swap..."
+        echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
+        echo "nohup swapon /swapfile" >> /etc/local.d/swap.start
+        chmod +x /etc/local.d/swap.start
+        rc-update add local
+    else
+        echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
+    fi
+
+    echo "虚拟内存大小已调整为 ${new_swap_size}MB"
+}
+
+# 判断当前swap的大小
+panduan_swap() {
+    # 获取当前的 swap 总大小（以 MB 为单位）
+    current_swap_size=$(free -m | awk '/Swap:/ {print $2}')
+    # 判断当前的 swap 大小是否小于或等于 1024 MB
+    if [[ "$current_swap_size" -le 1024 ]]; then
+        echo "当前的 swap 小于或等于 1024 MB，需要增加 swap 空间。"
+        add_swap 1024
+    else
+        echo "当前的 swap 已经超过 1024 MB，无需增加。"
+    fi
+}
+
+# 测试脚本
+test_script() {
+    while true; do
+        clear
+        echo "▶ 测试脚本合集"
+        echo ""
+        echo "-----解锁状态检测--------"        
+        echo "1. ChatGPT解锁状态检测"
+        echo "2. Region流媒体解锁测试"
+        echo "3. yeahwu流媒体解锁检测"
+        echo "4. xykt_IP质量体检脚本"
+        echo ""
+        echo "------网络线路测速------------"
+        echo "21. besttrace三网回程延迟路由测试"
+        echo "22. mtr_trace三网回程线路测试"
+        echo "23. Superspeed三网测速"
+        echo "24. nxtrace快速回程测试脚本"
+        echo "25. nxtrace指定IP回程测试脚本"
+        echo "26. ludashi2020三网线路测试"
+        echo ""
+        echo "----硬件性能测试----------"
+        echo "41. yabs性能测试"
+        echo "42. icu/gb5 CPU性能测试脚本"
+        echo ""
+        echo "----综合性测试-----------"
+        echo "61. bench性能测试"
+        echo -e "62. spiritysdx融合怪测评 "
+        echo "------------------------"
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            1)
+                clear
+                bash <(curl -Ls https://cdn.jsdelivr.net/gh/missuo/OpenAI-Checker/openai.sh)
+                break_end
+                ;;
+            2)
+                clear
+                bash <(curl -L -s check.unlock.media)
+                break_end
+                ;;
+            3)
+                clear
+                install wget
+                wget -qO- https://github.com/yeahwu/check/raw/main/check.sh | bash
+                break_end
+                ;;
+            4)
+                clear
+                bash <(curl -Ls IP.Check.Place)
+                break_end
+                ;;
+            21)
+                clear
+                install wget
+                wget -qO- git.io/besttrace | bash
+                break_end
+                ;;
+            22)
+                clear
+                curl https://raw.githubusercontent.com/zhucaidan/mtr_trace/main/mtr_trace.sh | bash
+                break_end
+                ;;
+            23)
+                clear
+                bash <(curl -Lso- https://git.io/superspeed_uxh)
+                break_end
+                ;;
+            24)
+                clear
+                curl nxtrace.org/nt |bash
+                nexttrace --fast-trace --tcp
+                break_end
+                ;;
+            25)
+                clear
+
+                echo "可参考的IP列表"
+                echo "------------------------"
+                echo "北京电信: 219.141.136.12"
+                echo "北京联通: 202.106.50.1"
+                echo "北京移动: 221.179.155.161"
+                echo "上海电信: 202.96.209.133"
+                echo "上海联通: 210.22.97.1"
+                echo "上海移动: 211.136.112.200"
+                echo "广州电信: 58.60.188.222"
+                echo "广州联通: 210.21.196.6"
+                echo "广州移动: 120.196.165.24"
+                echo "成都电信: 61.139.2.69"
+                echo "成都联通: 119.6.6.6"
+                echo "成都移动: 211.137.96.205"
+                echo "湖南电信: 36.111.200.100"
+                echo "湖南联通: 42.48.16.100"
+                echo "湖南移动: 39.134.254.6"
+                echo "------------------------"
+
+                read -p "输入一个指定IP: " testip
+                curl nxtrace.org/nt |bash
+                nexttrace $testip
+                break_end
+                ;;
+            26)
+                clear
+                curl https://raw.githubusercontent.com/ludashi2020/backtrace/main/install.sh -sSf | sh
+                break_end
+                ;;
+            41)
+                clear
+                add_swap 1024
+                curl -sL yabs.sh | bash -s -- -i -5
+                break_end
+                ;;
+            42)
+                clear
+                panduan_swap
+                bash <(curl -sL bash.icu/gb5)
+                break_end
+                ;;
+            61)
+                clear
+                curl -Lso- bench.sh | bash
+                break_end
+                ;; 
+            62)
+                clear
+                curl -L https://gitlab.com/spiritysdx/za/-/raw/main/ecs.sh -o ecs.sh && chmod +x ecs.sh && bash ecs.sh
+                break_end
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo "无效的输入!"
+                ;;
+        esac
+    done   
+}
+
+# 设置root密码
+set_rootpasswd() {
+
+    echo "设置你的ROOT密码"
+    passwd
+    if [ $? -ne 0 ]; then
+        echo "密码设置失败，请重试。"
+        return 1
+    fi
+    # 修改 SSH 配置以允许 root 登录
+    echo "正在修改 SSH 配置以允许 ROOT 登录..."
+    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+    service sshd restart
+    if [ $? -ne 0 ]; then
+        echo "SSH 服务重启失败，请手动重启服务。"
+        return 1
+    fi
+
+    echo "ROOT登录设置完毕！"
+    while true; do
+        read -p "需要重启服务器吗？(Y/N): " choice
+        case "$choice" in
+            [Yy])
+                echo "正在重启服务器..."
+                reboot
+                ;;
+            [Nn])
+                echo "已取消重启。"
+                ;;
+            0)
+                solin
+                ;;
+            *)
+                echo "无效的选择，请输入 Y 或 N。"
+                ;;
+        esac
+    done
+}
+
+# DD系统1
+dd_xitong_1() {    
+    read -p "请输入你重装后的密码: " vpspasswd
+    echo "任意键继续，重装后初始用户名: root  初始密码: $vpspasswd  初始端口: 22"
+    read -n 1 -s -r -p ""
+    install wget
+    bash <(wget --no-check-certificate -qO- 'https://raw.githubusercontent.com/MoeClub/Note/master/InstallNET.sh') $xitong -v 64 -p $vpspasswd -port 22
+}
+
+# 检查Docker是否安装
+check_docker_installed() {
+    if ! command -v docker &>/dev/null; then
+        echo "Docker 未安装。"
+        return 1
+    fi
+}
+
+# 定义安装更新 Docker 的函数
+update_docker() {
+    if [ -f "/etc/alpine-release" ]; then
+        # 更新软件包索引
+        apk update
+
+        # 安装一个更完整的内核版本
+        # apk add linux-lts
+
+        # 安装 Docker
+        apk add docker
+
+        # 将 Docker 添加到默认运行级别并启动
+        rc-update add docker default
+        Limit_log
+        service docker start || rc-service docker start
+
+        # 安装 Docker Compose
+        apk add docker-compose
+
+    else
+        # 其他 Linux 发行版，使用 Docker 的官方安装脚本
+        curl -fsSL https://get.docker.com | sh
+
+        # Docker Compose 需要单独安装，这里使用 Linux 的通用安装方法
+        # 注意：这里需要检查 Docker Compose 的官方GitHub仓库以获得最新安装步骤
+        LATEST_COMPOSE=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+        curl -L "https://github.com/docker/compose/releases/download/${LATEST_COMPOSE}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+
+        # 为了兼容性，检查是否安装了 systemctl，如果是则启动并使能 Docker 服务
+        if command -v systemctl &>/dev/null; then
+            systemctl start docker
+            systemctl enable docker
+            Limit_log  
+        fi
+    fi
+
+    sleep 2
+}
+
+# 甲骨文脚本
+oracle_script() {
+    while true; do
+        clear
+        echo "▶ 甲骨文云脚本合集"
+        echo "------------------------"
+        echo "1. 安装闲置机器活跃脚本"
+        echo "2. 卸载闲置机器活跃脚本"
+        echo "------------------------"
+        echo "3. DD重装系统脚本"
+        echo "4. R探长开机脚本"
+        echo "------------------------"
+        echo "5. 开启ROOT密码登录模式"
+        echo "------------------------"
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            1)
+                clear
+                echo "活跃脚本: CPU占用10-20% 内存占用15% "
+                if ask_confirmation "确定安装闲置机器活跃脚本吗？"; then
+                    if check_docker_installed; then
+                        echo "Docker is installed."
+                    else
+                        update_docker
+                    fi
+                    docker run -itd --name=lookbusy --restart=always \
+                        -e TZ=Asia/Shanghai \
+                        -e CPU_UTIL=10-20 \
+                        -e CPU_CORE=1 \
+                        -e MEM_UTIL=15 \
+                        -e SPEEDTEST_INTERVAL=120 \
+                        fogforest/lookbusy
+                    echo "活跃脚本安装完成。"
+                else
+                    echo "安装已取消。"
+                fi
+                ;;
+            2)
+                clear
+                if docker rm -f lookbusy && docker rmi fogforest/lookbusy; then
+                    echo "闲置机器活跃脚本已卸载。"
+                else
+                    echo "卸载失败，请检查 Docker 是否运行。"
+                fi
+                ;;
+            3)
+                clear
+                echo "请备份数据，将为你重装系统，预计花费15分钟。"
+                read -p "确定继续吗？(Y/N): " choice
+
+                case "$choice" in
+                    [Yy])
+                        while true; do
+                            read -p "请选择要重装的系统:  1. Debian12 | 2. Ubuntu20.04 : " sys_choice
+
+                            case "$sys_choice" in
+                                1)
+                                    xitong="-d 12"
+                                    break  # 结束循环
+                                    ;;
+                                2)
+                                    xitong="-u 20.04"
+                                    break  # 结束循环
+                                    ;;
+                                *)
+                                    echo "无效的选择，请重新输入。"
+                                    ;;
+                            esac
+                        done
+                        
+                        dd_xitong_1
+                        ;;
+                    [Nn])
+                        echo "已取消"
+                        ;;
+                    *)
+                        echo "无效的选择，请输入 Y 或 N。"
+                        ;;
+                esac
+                ;;
+
+            4)
+                clear
+                echo "该功能处于开发阶段，敬请期待！"
+                ;;
+            5)
+                clear
+                set_rootpasswd
+                ;;
+            0)
+                # 退出脚本
+                break
+                ;;
+            *)
+                echo "无效的选项，请重新输入！"
+                ;;
+        esac
+        break_end
+    done
+}
+
+# GCP DD系统1
+gcp_xitong_1() {    
+    read -p "请输入你重装后的密码: " vpspasswd
+    read -p "请输入你需要重装的VPS的内网IP: " ip_addr
+    # 简单验证IP地址格式
+    if [[ $ip_addr =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        gateway="${ip_addr%.*}.1"
+        echo "任意键继续，重装后初始用户名: root  初始密码: $vpspasswd  初始端口: 22"
+        read -n 1 -s -r -p ""
+        install wget
+        bash <(wget --no-check-certificate -qO- 'https://raw.githubusercontent.com/MoeClub/Note/master/InstallNET.sh') --ip-addr $ip_addr --ip-gate $gateway --ip-mask 255.255.255.0 $xitong -v 64 -p $vpspasswd -port 22 
+    else
+        echo "输入的IP地址格式不正确。"
+    fi
+}
+
+#谷歌云脚本
+gcp_script() {
+    while true; do
+        clear
+        echo "▶ 谷歌云脚本合集"
+        echo "------------------------"
+        echo "1. DD重装系统脚本"
+        echo "------------------------"
+        echo "0. 返回主菜单"
+        echo "------------------------"
+        read -p "请输入你的选择: " sub_choice
+
+        case $sub_choice in
+            1)
+                clear
+                echo "请备份数据，将为你重装系统，预计花费15分钟。"
+                read -p "确定继续吗？(Y/N): " choice
+
+                case "$choice" in
+                    [Yy])
+                        while true; do
+                            read -p "请选择要重装的系统:  1. Debian12 | 2. Ubuntu20.04 : " sys_choice
+
+                            case "$sys_choice" in
+                                1)
+                                    xitong="-d 12"
+                                    break  # 结束循环
+                                    ;;
+                                2)
+                                    xitong="-u 20.04"
+                                    break  # 结束循环
+                                    ;;
+                                *)
+                                    echo "无效的选择，请重新输入。"
+                                    ;;
+                            esac
+                        done
+                        
+                        gcp_xitong_1
+                        ;;
+                    [Nn])
+                        echo "已取消"
+                        ;;
+                    *)
+                        echo "无效的选择，请输入 Y 或 N。"
+                        ;;
+                esac
+                ;;
+            0)
+                # 退出脚本
+                solin
+                ;;
+            *)
+                echo "无效的选项，请重新输入！"
+                ;;
+        esac    
+    done
+}
+
 # 主逻辑
 case "$1" in
         query)
@@ -498,7 +1047,19 @@ case "$1" in
         commontool)
             common_tool_install
             ;;
+        bbr)
+            bbr_script
+            ;;
+        test)
+            test_script
+            ;;
+        oracle)
+            oracle_script
+            ;;
+        gcp)
+            gcp_script
+            ;;
         *)
-            echo "Usage: $0 {update|state|uninstall|manage}"
+            echo "Usage: $0 {update|query|clean|commontool|bbr|test|oracle|gcp}"
             exit 1
     esac
