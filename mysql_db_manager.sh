@@ -1,14 +1,21 @@
 #!/bin/bash
 
-# 函数：退出
-break_end_db() {
-	echo -e "\033[0;32m操作完成\033[0m"
-	echo "按任意键继续..."
-	read -n 1 -s -r -p ""
-	echo
-	clear
-}
+huang='\033[33m'
+bai='\033[0m'
+lv='\033[0;32m'
+lan='\033[0;34m'
+hong='\033[31m'
+lianglan='\033[96m'
+hui='\e[37m'
 
+# 函数：退出
+break_end() {
+    echo -e "${lv}操作完成${bai}"
+    echo "按任意键继续..."
+    read -n 1 -s -r -p ""
+    echo
+    clear
+}
 # 定义安装软件包函数
 install() {
     if [ $# -eq 0 ]; then
@@ -383,7 +390,7 @@ command_midif_data() {
     modify_column_data "$dbname" "$table_name" "$primary_key" "$primary_key_value" "$row_name" "$new_key_value" "$container_name_mysql" "$credentials1"
     clear
     list_table_data "$container_name_mysql" "$credentials1" "$dbname" "$table_name"
-    break_end_db
+    break_end
 }
 
 # 修改数据库
@@ -405,18 +412,18 @@ modif_db(){
             1)
                 read -p "请输入要查询的数据库名称: " dbname
                 query_database "$container_name_mysql" "$credentials1" "$dbname"
-                break_end_db
+                break_end
                 ;;
             2)
                 read -p "请输入要修改的原数据库名称: " old_dbname
                 read -p "请输入新数据库名称: " new_dbname
                 rename_database "$old_dbname" "$new_dbname" "$container_name_mysql" "$credentials1" 
-                break_end_db               
+                break_end               
                 ;;
             3)
                 read -p "请输入要修改数据表的数据库名称: " dbname
                 command_midif_db "$container_name_mysql" "$credentials1" "$dbname"
-                break_end_db
+                break_end
                 ;;
             4)
                 read -p "请输入要修改数据表的数据库名称: " dbname
@@ -438,64 +445,6 @@ check_docker_installed_db() {
         echo "Docker 未安装。"
         return 1
     fi
-}
-
-# 开启容器的 IPv6 功能，以及限制日志文件大小，防止 Docker 日志塞满硬盘
-Limit_log_db() {
-    cat > /etc/docker/daemon.json <<EOF
-{
-    "log-driver": "json-file",
-    "log-opts": {
-        "max-size": "20m",
-        "max-file": "3"
-    },
-    "ipv6": true,
-    "fixed-cidr-v6": "fd00:dead:beef:c0::/80",
-    "experimental":true,
-    "ip6tables":true
-}
-EOF
-}
-
-# 定义安装更新 Docker 的函数
-update_docker_db() {
-    if [ -f "/etc/alpine-release" ]; then
-        # 更新软件包索引
-        apk update
-
-        # 安装一个更完整的内核版本
-        # apk add linux-lts
-
-        # 安装 Docker
-        apk add docker
-
-        # 将 Docker 添加到默认运行级别并启动
-        rc-update add docker default
-        Limit_log_db
-        service docker start || rc-service docker start
-
-        # 安装 Docker Compose
-        apk add docker-compose
-
-    else
-        # 其他 Linux 发行版，使用 Docker 的官方安装脚本
-        curl -fsSL https://get.docker.com | sh
-
-        # Docker Compose 需要单独安装，这里使用 Linux 的通用安装方法
-        # 注意：这里需要检查 Docker Compose 的官方GitHub仓库以获得最新安装步骤
-        LATEST_COMPOSE=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
-        curl -L "https://github.com/docker/compose/releases/download/${LATEST_COMPOSE}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-
-        # 为了兼容性，检查是否安装了 systemctl，如果是则启动并使能 Docker 服务
-        if command -v systemctl &>/dev/null; then
-            systemctl start docker
-            systemctl enable docker
-            Limit_log_db  
-        fi
-    fi
-
-    sleep 2
 }
 
 # 函数：获取用户输入或默认数据，20秒后无输入则使用默认值，如果开始输入则等待完成
@@ -581,7 +530,7 @@ reset_mysql_container() {
         echo "Usage: reset_mysql_container <container_name> <container_path>"
         return 1
     fi
-
+    
     #备份
     beifen_mysql $container_name $backup_path $dbrootpasswd
 
@@ -599,9 +548,7 @@ reset_mysql_container() {
 
 # 安装更新MYSQL环境
 update_db() {
-    local container_name="$1"
-    local dbrootpasswd="$2"
-
+    local dbroot_password='$1'
     db_mysql_path=$(get_default_data_db "请输入MYSQL的路径" "/home/docker" "20") 
     # 创建必要的目录和文件
     if [ -z "$db_mysql_path" ]; then
@@ -650,18 +597,17 @@ update_db() {
     sed -i "s|mysqlpasswd|$mysql_container_passwd|g" $db_mysql_path/docker-compose-mysql.yml
     sed -i "s|mysqluse|$mysql_container_dbuse|g" $db_mysql_path/docker-compose-mysql.yml
 
-    reset_mysql_container "$container_name" "$db_mysql_path/mysql_backup" "$dbrootpasswd"
+    reset_mysql_container "$mysql_container_name" "$db_mysql_path/mysql_backup" "$dbroot_password"
 }
 
 # 安装更新mysql环境
 install_db_mysql() {
-    local container_name1="$1"
-    local container_name_mysql=$(get_db_container_name "$container_name1")
-    local credentials=($(get_db_credentials "$container_name_mysql"))
-    update_db "$container_name_mysql" "${credentials[2]}"
+    local dbrootpasswd=$(grep -oP 'MYSQL_ROOT_PASSWORD:\s*\K.*' /home/docker/docker-compose-mysql.yml | tr -d '[:space:]')
+    update_db "$dbrootpasswd"
     cd $db_mysql_path && docker-compose -f docker-compose-mysql.yml up -d
     echo -e "安装信息如下： \n新的用户名: '"$mysql_container_dbuse"' \n新的用户密码: '"$mysql_container_passwd"' \n新的root密码: '"$mysql_container_rootwd"' "
     sleep 5
+       
 }
 
 # 函数：检查 MySQL 容器是否运行
@@ -694,7 +640,7 @@ manager_db_mysql() {
         clear
         echo "▶ MYSQL管理器"
         echo "------------------------"
-        echo "1. 安装更新MYSQL环境"
+        echo "1. 安装更新MYSQL环境(会关闭脚本)"
         echo "------------------------"				
         echo "2. 查看MYSQL全局状态"
         echo "------------------------"
@@ -715,7 +661,7 @@ manager_db_mysql() {
                     echo "Running 'mysql --version' to check the installed MySQL version:"
                     docker exec mysql mysql --version
                     if ask_confirmation "MySQL已安装，确定要更新MySQL吗?（更新后用户名等信息会变）"; then
-                        install_db_mysql "$2" 
+                        install_db_mysql 
                     else
                         echo "操作已取消。"
                     fi
@@ -723,18 +669,20 @@ manager_db_mysql() {
                     # 如果 MySQL 容器未运行，检查 Docker 是否安装
                     if check_docker_installed_db; then
                         echo "MySQL container is not running. Attempting to start or install MySQL container."
+                        install_db_mysql
                     else
                         echo "Docker is not installed."
                         update_docker
                     fi
-		    install_db_mysql "$2" 
                 fi
-                exit
+                # 切换到一个一致的目录（例如，家目录）
+                cd ~ || exit
+                exec "$SHELL"
                 ;;
             2)
                 clear
                 mysql_display "$container_name1" "${credentials[2]}"
-                break_end_db
+                break_end
                 ;;
             3)
                 manager_mysql $container_name1
@@ -742,11 +690,11 @@ manager_db_mysql() {
             4)
                 clear
                 benfen_db_mysql "$container_name1"
-                break_end_db
+                break_end
                 ;;
             21)
                 reset_mysql_container "$container_name_mysql" "$db_mysql_path/mysql_backup"
-                break_end_db
+                break_end
                 ;;
             0)
                 break
@@ -780,20 +728,20 @@ manager_mysql() {
                 read -p "请输入新数据库名称: " dbname
                 read -p "请输入存放新数据库的容器: " container_save_name
                 create_database_and_grant "$container_save_name" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
-                break_end_db
+                break_end
                 ;;
             2)
                 read -p "请输入要删除的数据库名称：" dbname
                 read -p "请输入要删除数据库的容器: " container_save_name
                 delete_database "$container_save_name" "$dbname" "${credentials[2]}" "${credentials[0]}"
-                break_end_db
+                break_end
                 ;;
             3)
                 read -p "请输入要导入数据文件的完整路径：" datafile
                 read -p "请输入要导入数据库名称: " dbname
                 read -p "请输入要导入数据库的容器名称: " container_save_name
                 import_database "$container_save_name" "$dbname" "${credentials[1]}" "$datafile"
-                break_end_db
+                break_end
                 ;;
             4)
                 modif_db "$container_name1" "${credentials[2]}" "$container_name_mysql"
@@ -810,31 +758,16 @@ manager_mysql() {
 
 # 主逻辑
 case "$1" in
-    install)
-        # 检查 MySQL 是否已经安装并运行
-	if check_mysql_installed_db; then
-	    echo "Running 'mysql --version' to check the installed MySQL version:"
-	    docker exec mysql mysql --version
-	    if ask_confirmation "MySQL已安装，确定要更新MySQL吗?（更新后用户名等信息会变）"; then
-		install_db_mysql "$2" 
-	    else
-		echo "操作已取消。"
-	    fi
-	else
-	    # 如果 MySQL 容器未运行，检查 Docker 是否安装
-	    if check_docker_installed_db; then
-		echo "MySQL container is not running. Attempting to start or install MySQL container."
-	    else
-		echo "Docker is not installed."
-		update_docker
-	    fi
-	    install_db_mysql "$2" 
-	fi
-	exit
+    create)
+        container_name1="$2"
+	    dbname="$3"
+        container_name_mysql=$(get_db_container_name "$container_name1")
+        credentials=($(get_db_credentials "$container_name_mysql"))
+        create_database_and_grant "$container_name_mysql" "$dbname" "${credentials[0]}" "${credentials[1]}" "${credentials[2]}"
         ;;
-    createfile)
- 	update_db
-  	;;
+    install)
+        install_db_mysql "$2" 
+        ;;
     delete)
         container_name1="$2"
 	    dbname="$3"
@@ -846,6 +779,6 @@ case "$1" in
         manager_db_mysql "$2"
         ;;
     *)
-        echo "Usage: $0 {create|delete|manage} ..."
+        echo "Usage: $0 {install|delete|manage} ..."
         exit 1
 esac
