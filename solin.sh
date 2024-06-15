@@ -3446,8 +3446,10 @@ install_ldnmp(){
                         docker rm -f nginx php php74 mysql redis
                         docker rmi nginx nginx:alpine php:fpm php:fpm-alpine php:7.4.33-fpm php:7.4-fpm-alpine mysql redis redis:alpine
                         rm -rf /home/docker/web
+			break_end
                         ;;
                     [Nn])
+		    	break_end
                         ;;
                     *)
                         echo "无效的选择，请输入 Y 或 N。"
