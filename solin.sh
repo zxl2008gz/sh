@@ -3306,6 +3306,7 @@ install_ldnmp(){
                 install_ssltls
                 redirect_config
                 nginx_status "mysql"
+		break_end
                 ;;
             63)
                 webname="反向代理-IP+端口"
@@ -3317,6 +3318,7 @@ install_ldnmp(){
                 install_ssltls
                 reverseproxy_config
                 nginx_status "mysql"
+		break_end
                 ;;
             64)
                 webname="反向代理-域名"
@@ -3328,6 +3330,7 @@ install_ldnmp(){
                 install_ssltls
                 reverseproxy_domain
                 nginx_status "mysql"
+		break_end
                 ;;
             65)
                 webname="静态站点"
@@ -3336,6 +3339,7 @@ install_ldnmp(){
                 install_ssltls
                 custom_static
                 nginx_status "mysql"
+		break_end
                 ;;
             66)
                 clear
