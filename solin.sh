@@ -3379,14 +3379,17 @@ install_ldnmp(){
             81)
                 root_use
                 site_manage "mysql"
+		break_end
                 ;;
             82)
                 clear
                 cd /home/ && tar czvf web_$(date +"%Y%m%d%H%M%S").tar.gz web
                 backup_site_data
+		break_end
                 ;;
             83)
                 scheduled_remote_backup
+		break_end
                 ;;
             84)
                 # 还原全站数据
@@ -3408,12 +3411,15 @@ install_ldnmp(){
                 echo "LDNMP环境安装完毕"
                 echo "------------------------"
                 ldnmp_info
+		break_end
                 ;;
             85)
                 site_defense_program
+		break_end
                 ;;
             86)
                 optimize_ldnmp
+		break_end
                 ;;
             87)
                 clear
@@ -3440,7 +3446,8 @@ install_ldnmp(){
                     break_end
                 else
                     echo "端口已被占用，请检查并释放该端口。"
-                fi             
+                fi 
+		break_end
                 ;;
             88)
                 clear
