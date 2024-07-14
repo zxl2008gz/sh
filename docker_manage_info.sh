@@ -199,7 +199,7 @@ get_container_config() {
     docker inspect --format '{{json .Config.Env}}' "$container_name" > "/tmp/${container_name}_env_config.json"
 }
 
-# 函数：恢复容器
+# 恢复容器函数
 restore_container() {
     local container_name="$1"
     local backup_path="$2"
@@ -229,14 +229,6 @@ restore_container() {
     # 准备运行命令选项
     run_options=""
 
-    # 处理网络配置
-    if [ -n "$original_network_settings" ] && [ "$original_network_settings" != "null" ]; then
-        network_names=$(echo $original_network_settings | grep -oP '"\K[^"]+(?=":)' )
-        for network in $network_names; do
-            run_options="$run_options --network $network"
-        done
-    fi
-
     # 处理挂载卷
     if [ -n "$original_volumes" ] && [ "$original_volumes" != "null" ]; then
         volumes=$(echo $original_volumes | grep -oP '"Source":"\K[^"]+' | sed 'N;s/\n/ /' )
@@ -262,7 +254,7 @@ restore_container() {
         original_cmd=$(echo $original_cmd | sed 's/[][]//g' | sed 's/,/ /g')
     fi
 
-    # 创建并启动新容器，保持原有容器名称和设置
+    # 创建并启动新容器，省略复杂的网络配置
     docker run --name $container_name $run_options -d $new_image_name $original_cmd
     echo "容器 $container_name 已从 $backup_path 恢复并启动"
 }
