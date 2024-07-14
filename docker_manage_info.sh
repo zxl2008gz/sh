@@ -150,6 +150,29 @@ get_container_name_docker() {
     echo $dockername
 }
 
+# 功能：备份容器
+backup_container() {
+    local container_name="$1"
+    local backup_path="$2"
+    local backup_file
+
+    # 确保备份路径包含文件名
+    if [[ "$backup_path" == */ ]]; then
+        # 如果用户输入的是目录，则生成一个默认的备份文件名
+        backup_file="${backup_path}${container_name}_backup.tar"
+    else
+        # 否则使用用户输入的完整路径和文件名
+        backup_file="$backup_path"
+    fi
+
+    docker export $container_name > "$backup_file"
+    if [ $? -eq 0 ]; then
+        echo "容器 $container_name 已备份到 $backup_file"
+    else
+        echo "备份容器 $container_name 失败。"
+    fi
+}
+
 # 功能：检查并创建网络
 check_and_create_networks() {
     # 获取所有正在运行的容器ID
@@ -397,10 +420,9 @@ docker_container_manage() {
                 esac
                 ;;
             6)
-                read -p "请输入要备份的容器名: " container_name
+                container_name=$(get_container_name_docker)
                 read -p "请输入备份文件路径（包括文件名）: " backup_path
-                docker export $container_name > "$backup_path"
-                echo "容器 $container_name 已备份到 $backup_path"
+                backup_container $container_name $backup_path
                 ;;
             7)
                 read -p "请输入要恢复的容器名: " container_name
