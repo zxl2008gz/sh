@@ -166,7 +166,7 @@ backup_container() {
         backup_file="${backup_path}${container_name}_backup_${current_date}.tar"
     else
         # 否则使用用户输入的完整路径和文件名，但在文件名中添加日期
-        backup_file="${backup_path%.*}_${current_date}.${backup_path##*.}"
+        backup_file="${backup_path%.*}_${current_date}.${backup_path##*}.tar"
     fi
 
     docker export $container_name > "$backup_file"
