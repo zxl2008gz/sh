@@ -1,17 +1,47 @@
 #!/bin/bash
 
-fun_set_text_color(){
-    COLOR_YELLOW='\033[33m'			# 黄色
-    COLOR_WHITE='\033[0m'			# 白色
-    COLOR_GREEN_DARK='\033[0;32m'	# 深绿色
-    COLOR_BLUE_LIGHT='\033[0;34m'	# 浅蓝色
-    COLOR_RED_DARK='\033[31m'		# 深红色
-    COLOR_GRAY='\e[37m'				# 灰色
-	COLOR_PINK='\033[35m'    		# 粉色
-	COLOR_GREEN_FLASHING='\033[32m\033[5m'  # 绿色，闪烁
+# 设置严格模式
+set -euo pipefail
+
+# 版本信息
+VERSION="1.0.0"
+
+# 加载配置文件
+CONFIG_FILE="/etc/docker_manager.conf"
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+fi
+
+# 日志函数
+log() {
+    local level="$1"
+    local message="$2"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $message" >> /var/log/docker_manager.log
 }
 
-fun_set_text_color
+# 颜色设置
+COLOR_YELLOW='\033[33m'
+COLOR_WHITE='\033[0m'
+COLOR_GREEN_DARK='\033[0;32m'
+COLOR_BLUE_LIGHT='\033[0;34m'
+COLOR_RED_DARK='\033[31m'
+COLOR_GRAY='\e[37m'
+COLOR_PINK='\033[35m'
+COLOR_GREEN_FLASHING='\033[32m\033[5m'
+
+# 使用颜色
+print_color() {
+    local color="$1"
+    local text="$2"
+    echo -e "${color}${text}${COLOR_WHITE}"
+}
+
+# 错误处理
+error_exit() {
+    log "ERROR" "$1"
+    print_color "$COLOR_RED_DARK" "错误: $1"
+    exit 1
+}
 
 # 函数：退出
 break_end() {
@@ -25,123 +55,104 @@ break_end() {
 # 检查Docker是否安装
 check_docker_installed() {
     if ! command -v docker &>/dev/null; then
-        echo "Docker 未安装。"
-        return 1
+        error_exit "Docker 未安装。"
     fi
-    return 0
 }
 
-# 函数：询问用户确认
+# 获取用户确认
 ask_confirmation() {
     local prompt="$1"
     local choice
-
     while true; do
-        read -p "$prompt (Y/N): " choice
-        case "$choice" in
-            [Yy]) return 0 ;;
-            [Nn]) return 1 ;;
-            *) echo "无效的选择，请输入 Y 或 N。" ;;
+        read -rp "$prompt (Y/N): " choice
+        case "${choice,,}" in
+            y|yes) return 0 ;;
+            n|no) return 1 ;;
+            *) print_color "$COLOR_RED_DARK" "无效的选择，请输入 Y 或 N。" ;;
         esac
     done
 }
 
-# 开启容器的 IPv6 功能，以及限制日志文件大小，防止 Docker 日志塞满硬盘
+# 限制Docker日志大小
 limit_log() {
-    cat > /etc/docker/daemon.json <<EOF
-{
-    "log-driver": "json-file",
-    "log-opts": {
-        "max-size": "20m",
-        "max-file": "3"
-    },
-    "ipv6": true,
-    "fixed-cidr-v6": "fd00:dead:beef:c0::/80",
-    "experimental":true,
-    "ip6tables":true
-}
-EOF
-}
-
-# 定义安装更新 Docker 的函数
-update_docker() {
-    if [ -f "/etc/alpine-release" ]; then
-        # 更新软件包索引
-        apk update
-
-        # 安装一个更完整的内核版本
-        # apk add linux-lts
-
-        # 安装 Docker
-        apk add docker
-
-        # 将 Docker 添加到默认运行级别并启动
-        rc-update add docker default
-        limit_log
-        service docker start || rc-service docker start
-
-        # 安装 Docker Compose
-        apk add docker-compose
+    local config_file="/etc/docker/daemon.json"
+    local temp_file=$(mktemp)
+    
+    if [[ -f "$config_file" ]]; then
+        cp "$config_file" "$temp_file"
     else
-        # 其他 Linux 发行版，使用 Docker 的官方安装脚本
-        curl -fsSL https://get.docker.com | sh
-
-        # Docker Compose 需要单独安装，这里使用 Linux 的通用安装方法
-        # 注意：这里需要检查 Docker Compose 的官方GitHub仓库以获得最新安装步骤
-        LATEST_COMPOSE=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
-        curl -L "https://github.com/docker/compose/releases/download/${LATEST_COMPOSE}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-
-        # 检查 docker-compose 是否可执行
-        if ! command -v docker-compose &>/dev/null; then
-            echo "docker-compose 安装失败。"
-            exit 1
-        fi
-
-        # 为了兼容性，检查是否安装了 systemctl，如果是则启动并使能 Docker 服务
-        if command -v systemctl &>/dev/null; then
-            systemctl start docker
-            systemctl enable docker
-            limit_log  
-        fi
+        echo "{}" > "$temp_file"
     fi
 
-    sleep 2
+    # 使用 sed 来修改 JSON 文件
+    sed -i 's/\(.*\)}/\1,/' "$temp_file"  # 如果文件不为空，在最后添加逗号
+    cat << EOF >> "$temp_file"
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "20m",
+    "max-file": "3"
+  },
+  "ipv6": true,
+  "fixed-cidr-v6": "fd00:dead:beef:c0::/80",
+  "experimental": true,
+  "ip6tables": true
+}
+EOF
+
+    mv "$temp_file" "$config_file"
+    log "INFO" "Docker日志大小已限制"
 }
 
-# 查看Docker全局状态逻辑
-state_docker() {
+# 更新Docker
+update_docker() {
+    log "INFO" "开始更新Docker"
+    
+    if [[ -f "/etc/alpine-release" ]]; then
+        apk update || error_exit "无法更新包索引"
+        apk add docker || error_exit "无法安装Docker"
+        rc-update add docker default || error_exit "无法将Docker添加到默认运行级别"
+        limit_log
+        service docker start || rc-service docker start || error_exit "无法启动Docker服务"
+        apk add docker-compose || error_exit "无法安装Docker Compose"
+    else
+        curl -fsSL https://get.docker.com | sh || error_exit "无法安装Docker"
+        LATEST_COMPOSE=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+        curl -L "https://github.com/docker/compose/releases/download/${LATEST_COMPOSE}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose || error_exit "无法下载Docker Compose"
+        chmod +x /usr/local/bin/docker-compose || error_exit "无法设置Docker Compose可执行权限"
+        
+        if command -v systemctl &>/dev/null; then
+            systemctl start docker || error_exit "无法启动Docker服务"
+            systemctl enable docker || error_exit "无法设置Docker开机自启"
+            limit_log
+        fi
+    fi
+    
+    log "INFO" "Docker更新完成"
+}
 
-    # 打印Docker版本
-    echo "Docker 版本:"
+# Docker状态检查
+state_docker() {
+    check_docker_installed
+    
+    print_color "$COLOR_BLUE_LIGHT" "Docker 版本:"
     docker --version
-    # 检查docker-compose是否安装
     if command -v docker-compose &>/dev/null; then
         docker-compose --version
     else
-        echo "docker-compose 未安装。"
+        print_color "$COLOR_YELLOW" "docker-compose 未安装。"
     fi
-    echo "---------------------------------------------"
-
-    # 打印Docker镜像列表
-    echo "Docker 镜像列表:"
+    
+    print_color "$COLOR_BLUE_LIGHT" "Docker 镜像列表:"
     docker image ls
-    echo "---------------------------------------------"
-
-    # 打印Docker容器列表
-    echo "Docker 容器列表:"
+    
+    print_color "$COLOR_BLUE_LIGHT" "Docker 容器列表:"
     docker ps -a
-    echo "---------------------------------------------"
-
-    # 打印Docker卷列表
-    echo "Docker 卷列表:"
+    
+    print_color "$COLOR_BLUE_LIGHT" "Docker 卷列表:"
     docker volume ls
-    echo "---------------------------------------------"
-
-    # 打印Docker网络列表
-    echo "Docker 网络列表:"
+    
+    print_color "$COLOR_BLUE_LIGHT" "Docker 网络列表:"
     docker network ls
-    echo "---------------------------------------------"
 }
 
 # 功能：获取容器名
@@ -231,7 +242,9 @@ restore_container() {
         for volume in $(echo $original_volumes | grep -oP '{"Source":"[^"]+","Destination":"[^"]+"' | sed 's/{//g' | sed 's/}//g' | sed 's/"//g'); do
             source=$(echo $volume | awk -F, '{print $1}' | awk -F: '{print $2}')
             destination=$(echo $volume | awk -F, '{print $2}' | awk -F: '{print $2}')
-            run_options="$run_options -v $source:$destination"
+            if [ -n "$source" ] && [ -n "$destination" ]; then
+                run_options="$run_options -v $source:$destination"
+            fi
         done
     fi
 
@@ -244,7 +257,7 @@ restore_container() {
     fi
 
     # 处理运行命令
-    if [ -n "$original_cmd" ] && [ "$original_cmd" != "null" ]; then
+    if [ -n "$original_cmd" ] && [ "$original_cmd" != "null" ];then
         original_cmd=$(echo $original_cmd | sed 's/[][]//g' | sed 's/,/ /g')
     fi
 
@@ -977,8 +990,8 @@ uninstall_docker() {
 docker_manage() {
     while true; do
         clear
-        echo "▶ Docker管理器"
-        echo "------------------------"
+        print_color "$COLOR_GREEN_DARK" "▶ Docker管理器 v${VERSION}"
+        print_color "$COLOR_YELLOW" "------------------------"
         echo "1. 安装更新Docker环境"
         echo "------------------------"				
         echo "2. 查看Dcoker全局状态"
@@ -1000,9 +1013,9 @@ docker_manage() {
         echo "50. 监控和警报"	
         echo "------------------------"	
         echo "60. 卸载Dcoker环境"	
-        echo "------------------------"		
+        print_color "$COLOR_YELLOW" "------------------------"	
         echo "0. 返回主菜单"
-        echo "------------------------"
+        print_color "$COLOR_YELLOW" "------------------------"
         read -p "请输入你的选择: " sub_choice
 
         case $sub_choice in
@@ -1080,32 +1093,37 @@ docker_manage() {
                 break
                 ;;
             *)
-                echo "无效的输入!"
+                print_color "$COLOR_RED_DARK" "无效的选择，请重新输入。" ;;
                 ;;
         esac
         break_end
     done 
 }
 
-# 主逻辑
-case "$1" in
-    update)
-        update_docker
-        ;;
-    state)
-        if check_docker_installed; then
-            state_docker
+# 主程序入口
+main() {
+    if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+        if [[ "$#" -eq 0 ]]; then
+            main_menu
         else
-            echo "Docker is not installed."
+            case "$1" in
+                update) 
+                    update_docker
+                    ;;
+                state) 
+                    if check_docker_installed; then
+                        state_docker
+                    else
+                        echo "Docker is not installed."
+                    fi
+                    ;;
+                uninstall) 
+                    uninstall_docker
+                    ;;
+                *) error_exit "Usage: $0 {update|state|uninstall}" ;;
+            esac
         fi
-        ;;
-    uninstall)
-        uninstall_docker
-        ;;
-    manage)
-        docker_manage
-        ;;
-    *)
-        echo "Usage: $0 {update|state|uninstall|manage}"
-        exit 1
-esac
+    fi
+}
+
+main "$@"
