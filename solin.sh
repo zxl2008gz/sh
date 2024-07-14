@@ -2853,7 +2853,7 @@ docker_script_path() {
 #docker管理
 docker_manage() {
     docker_script_path
-    ./docker_manage_info.sh
+    ./docker_manage_info.sh manage
 }
 
 #mysql脚本路径
