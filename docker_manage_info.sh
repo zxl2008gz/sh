@@ -1104,7 +1104,7 @@ docker_manage() {
 main() {
     if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         if [[ "$#" -eq 0 ]]; then
-            main_menu
+            docker_manage
         else
             case "$1" in
                 update) 
