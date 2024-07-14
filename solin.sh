@@ -2850,6 +2850,8 @@ docker_script_path() {
     curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/docker_manage_info.sh
     chmod +x docker_manage_info.sh
     echo "Downloaded and made docker_manage_info.sh executable"
+    ls -l docker_manage_info.sh  # 查看文件权限和属性
+    read -p "Press any key to continue after verifying the download..."
 }
 
 #docker管理
@@ -2857,6 +2859,7 @@ docker_manage() {
     docker_script_path
     echo "Executing ./docker_manage_info.sh manage..."
     ./docker_manage_info.sh manage
+    read -p "Press any key to continue after executing docker_manage_info.sh..."
 }
 
 #mysql脚本路径
