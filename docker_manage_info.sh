@@ -1100,33 +1100,25 @@ docker_manage() {
     done 
 }
 
-# 主程序入口
-main() {
-    if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-        if [[ "$#" -eq 0 ]]; then
-            docker_manage
+# 主逻辑
+case "$1" in
+    update)
+        update_docker
+        ;;
+    state)
+        if check_docker_installed; then
+            state_docker
         else
-            case "$1" in
-                update) 
-                    update_docker
-                    ;;
-                state) 
-                    if check_docker_installed; then
-                        state_docker
-                    else
-                        echo "Docker is not installed."
-                    fi
-                    ;;
-                uninstall) 
-                    uninstall_docker
-                    ;;
-                manage)
-                    docker_manage
-                    ;;
-                *) error_exit "Usage: $0 {update|state|uninstall|manage}" ;;
-            esac
+            echo "Docker is not installed."
         fi
-    fi
-}
-
-main "$@"
+        ;;
+    uninstall)
+        uninstall_docker
+        ;;
+    manage)
+        docker_manage
+        ;;
+    *)
+        echo "Usage: $0 {update|state|uninstall|manage}"
+        exit 1
+esac
