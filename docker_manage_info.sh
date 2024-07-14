@@ -1120,7 +1120,10 @@ main() {
                 uninstall) 
                     uninstall_docker
                     ;;
-                *) error_exit "Usage: $0 {update|state|uninstall}" ;;
+                manage)
+                    docker_manage
+                    ;;
+                *) error_exit "Usage: $0 {update|state|uninstall|manage}" ;;
             esac
         fi
     fi
