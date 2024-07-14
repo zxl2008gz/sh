@@ -155,14 +155,18 @@ backup_container() {
     local container_name="$1"
     local backup_path="$2"
     local backup_file
+    local current_date
+
+    # 获取当前日期
+    current_date=$(date +"%Y%m%d_%H%M%S")
 
     # 确保备份路径包含文件名
     if [[ "$backup_path" == */ ]]; then
         # 如果用户输入的是目录，则生成一个默认的备份文件名
-        backup_file="${backup_path}${container_name}_backup.tar"
+        backup_file="${backup_path}${container_name}_backup_${current_date}.tar"
     else
-        # 否则使用用户输入的完整路径和文件名
-        backup_file="$backup_path"
+        # 否则使用用户输入的完整路径和文件名，但在文件名中添加日期
+        backup_file="${backup_path%.*}_${current_date}.${backup_path##*.}"
     fi
 
     docker export $container_name > "$backup_file"
@@ -421,7 +425,7 @@ docker_container_manage() {
                 ;;
             6)
                 container_name=$(get_container_name_docker)
-                read -p "请输入备份文件路径（包括文件名）: " backup_path
+                read -p "请输入备份文件路径: " backup_path
                 backup_container $container_name $backup_path
                 ;;
             7)
@@ -456,7 +460,7 @@ docker_container_manage() {
                 mkdir -p "$backup_dir"
                 for container_id in $(docker ps -q); do
                     container_name=$(docker inspect --format='{{.Name}}' $container_id | sed 's/^\///')
-                    backup_path="$backup_dir/$container_name.tar"
+                    backup_path="$backup_dir/${container_name}_backup_$(date +"%Y%m%d_%H%M%S").tar"
                     docker export $container_id > "$backup_path"
                     echo "容器 $container_name 已备份到 $backup_path"
                 done
