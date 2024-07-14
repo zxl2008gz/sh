@@ -46,7 +46,7 @@ error_exit() {
 # 函数：退出
 break_end() {
     echo -e "${COLOR_GREEN_DARK}操作完成${COLOR_WHITE}"
-    print_color "$COLOR_RED_DARK" "操作完成" "${COLOR_WHITE}"
+    print_color "$COLOR_RED_DARK" "操作完成"
     echo "按任意键继续..."
     read -n 1 -s -r -p ""
     echo
@@ -178,7 +178,7 @@ backup_container() {
         backup_file="${backup_path}${container_name}_backup_${current_date}.tar"
     else
         # 否则使用用户输入的完整路径和文件名，但在文件名中添加日期
-        backup_file="${backup_path%.*}_${current_date}.${backup_path##*}.tar"
+        backup_file="${backup_path%.*}_${current_date}.${backup_path##*.}"
     fi
 
     docker export $container_name > "$backup_file"
@@ -239,7 +239,6 @@ restore_container() {
 
     # 处理挂载卷
     if [ -n "$original_volumes" ] && [ "$original_volumes" != "null" ]; then
-        volumes=$(echo $original_volumes | grep -oP '"Source":"\K[^"]+' | sed 'N;s/\n/ /' )
         for volume in $(echo $original_volumes | grep -oP '{"Source":"[^"]+","Destination":"[^"]+"' | sed 's/{//g' | sed 's/}//g' | sed 's/"//g'); do
             source=$(echo $volume | awk -F, '{print $1}' | awk -F: '{print $2}')
             destination=$(echo $volume | awk -F, '{print $2}' | awk -F: '{print $2}')
