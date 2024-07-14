@@ -46,6 +46,7 @@ error_exit() {
 # 函数：退出
 break_end() {
     echo -e "${COLOR_GREEN_DARK}操作完成${COLOR_WHITE}"
+    print_color "$COLOR_RED_DARK" "操作完成" "${COLOR_WHITE}"
     echo "按任意键继续..."
     read -n 1 -s -r -p ""
     echo
@@ -1100,25 +1101,33 @@ docker_manage() {
     done 
 }
 
-# 主逻辑
-case "$1" in
-    update)
-        update_docker
-        ;;
-    state)
-        if check_docker_installed; then
-            state_docker
+# 主程序入口
+main() {
+    if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+        if [[ "$#" -eq 0 ]]; then
+            docker_manage
         else
-            echo "Docker is not installed."
+            case "$1" in
+                update) 
+                    update_docker
+                    ;;
+                state) 
+                    if check_docker_installed; then
+                        state_docker
+                    else
+                        echo "Docker is not installed."
+                    fi
+                    ;;
+                uninstall) 
+                    uninstall_docker
+                    ;;
+                manage)
+                    docker_manage
+                    ;;
+                *) error_exit "Usage: $0 {update|state|uninstall|manage}" ;;
+            esac
         fi
-        ;;
-    uninstall)
-        uninstall_docker
-        ;;
-    manage)
-        docker_manage
-        ;;
-    *)
-        echo "Usage: $0 {update|state|uninstall|manage}"
-        exit 1
-esac
+    fi
+}
+
+main "$@"
