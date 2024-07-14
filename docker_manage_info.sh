@@ -1094,7 +1094,7 @@ docker_manage() {
                 break
                 ;;
             *)
-                print_color "$COLOR_RED_DARK" "无效的选择，请重新输入。" ;;
+                print_color "$COLOR_RED_DARK" "无效的选择，请重新输入。"
                 ;;
         esac
         break_end
