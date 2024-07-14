@@ -2846,13 +2846,16 @@ gcp_script(){
 docker_script_path() {
     # 切换到一个一致的目录（例如，家目录）
     cd ~ || exit
+    echo "Downloading docker_manage_info.sh..."
     curl -O https://raw.githubusercontent.com/zxl2008gz/sh/main/docker_manage_info.sh
     chmod +x docker_manage_info.sh
+    echo "Downloaded and made docker_manage_info.sh executable"
 }
 
 #docker管理
 docker_manage() {
     docker_script_path
+    echo "Executing ./docker_manage_info.sh manage..."
     ./docker_manage_info.sh manage
 }
 
