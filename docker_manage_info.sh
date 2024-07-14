@@ -433,7 +433,7 @@ docker_container_manage() {
                 read -p "请输入备份目录路径: " backup_path
                 cd $backup_path
                 echo "可用的备份文件（.rar格式）："
-                ls *.rar
+                ls *.tar
                 read -p "请输入要恢复的文件名: " file_name
                 docker import "$backup_path/$file_name" $container_name
                 echo "容器 $container_name 已从 $backup_path 恢复"
