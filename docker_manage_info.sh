@@ -1,16 +1,21 @@
 #!/bin/bash
 
-huang='\033[33m'
-bai='\033[0m'
-lv='\033[0;32m'
-lan='\033[0;34m'
-hong='\033[31m'
-lianglan='\033[96m'
-hui='\e[37m'
+fun_set_text_color(){
+    COLOR_YELLOW='\033[33m'			# 黄色
+    COLOR_WHITE='\033[0m'			# 白色
+    COLOR_GREEN_DARK='\033[0;32m'	# 深绿色
+    COLOR_BLUE_LIGHT='\033[0;34m'	# 浅蓝色
+    COLOR_RED_DARK='\033[31m'		# 深红色
+    COLOR_GRAY='\e[37m'				# 灰色
+	COLOR_PINK='\033[35m'    		# 粉色
+	COLOR_GREEN_FLASHING='\033[32m\033[5m'  # 绿色，闪烁
+}
+
+fun_set_text_color
 
 # 函数：退出
 break_end() {
-    echo -e "${lv}操作完成${bai}"
+    echo -e "${COLOR_GREEN_DARK}操作完成${COLOR_WHITE}"
     echo "按任意键继续..."
     read -n 1 -s -r -p ""
     echo
@@ -23,6 +28,7 @@ check_docker_installed() {
         echo "Docker 未安装。"
         return 1
     fi
+    return 0
 }
 
 # 函数：询问用户确认
@@ -41,7 +47,7 @@ ask_confirmation() {
 }
 
 # 开启容器的 IPv6 功能，以及限制日志文件大小，防止 Docker 日志塞满硬盘
-Limit_log() {
+limit_log() {
     cat > /etc/docker/daemon.json <<EOF
 {
     "log-driver": "json-file",
@@ -71,12 +77,11 @@ update_docker() {
 
         # 将 Docker 添加到默认运行级别并启动
         rc-update add docker default
-        Limit_log
+        limit_log
         service docker start || rc-service docker start
 
         # 安装 Docker Compose
         apk add docker-compose
-
     else
         # 其他 Linux 发行版，使用 Docker 的官方安装脚本
         curl -fsSL https://get.docker.com | sh
@@ -87,11 +92,17 @@ update_docker() {
         curl -L "https://github.com/docker/compose/releases/download/${LATEST_COMPOSE}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
         chmod +x /usr/local/bin/docker-compose
 
+        # 检查 docker-compose 是否可执行
+        if ! command -v docker-compose &>/dev/null; then
+            echo "docker-compose 安装失败。"
+            exit 1
+        fi
+
         # 为了兼容性，检查是否安装了 systemctl，如果是则启动并使能 Docker 服务
         if command -v systemctl &>/dev/null; then
             systemctl start docker
             systemctl enable docker
-            Limit_log  
+            limit_log  
         fi
     fi
 
@@ -225,9 +236,104 @@ display_network_info() {
     done
 }
 
+# 功能：显示容器资源使用情况
+show_container_resources() {
+    clear
+    echo "容器资源使用情况："
+    docker stats --no-stream
+}
+
+# 功能：检查 Docker Compose 是否已安装
+check_docker_compose_installed() {
+    if ! command -v docker-compose &>/dev/null; then
+        echo "Docker Compose 未安装。请先安装 Docker Compose。"
+        return 1
+    fi
+    return 0
+}
+
+# Docker Compose 项目管理
+manage_docker_compose() {
+    if check_docker_compose_installed; then
+        clear
+        echo "Docker Compose 项目管理"
+        echo "------------------------"
+        echo "1. 启动 Docker Compose 项目"
+        echo "2. 停止 Docker Compose 项目"
+        echo "3. 查看 Docker Compose 日志"
+        echo "------------------------"
+        echo "0. 返回上一级选单"
+        echo "------------------------"
+        read -p "请输入你的选择: " choice
+
+        case $choice in
+            1)
+                read -p "请输入 docker-compose.yml 文件所在目录: " compose_dir
+                read -p "请输入 Docker Compose 文件名（默认为 docker-compose.yml）: " compose_file
+                compose_file=${compose_file:-docker-compose.yml}
+                (cd "$compose_dir" && sudo docker-compose -f "$compose_file" up -d)
+                ;;
+            2)
+                read -p "请输入 docker-compose.yml 文件所在目录: " compose_dir
+                read -p "请输入 Docker Compose 文件名（默认为 docker-compose.yml）: " compose_file
+                compose_file=${compose_file:-docker-compose.yml}
+                (cd "$compose_dir" && sudo docker-compose -f "$compose_file" down)
+                ;;
+            3)
+                read -p "请输入 docker-compose.yml 文件所在目录: " compose_dir
+                read -p "请输入 Docker Compose 文件名（默认为 docker-compose.yml）: " compose_file
+                compose_file=${compose_file:-docker-compose.yml}
+                (cd "$compose_dir" && sudo docker-compose -f "$compose_file" logs)
+                ;;
+            0)
+                return
+                ;;
+            *)
+                echo "无效选择，请重新输入。"
+                ;;
+        esac
+    fi
+}
+
+# 功能：设置 Docker 源
+set_docker_source() {
+    clear
+    echo "Docker 源管理"
+    echo "------------------------"
+    echo "1. 设置国内源（阿里云）"
+    echo "2. 恢复默认源"
+    echo "------------------------"
+    echo "0. 返回上一级选单"
+    echo "------------------------"
+    read -p "请输入你的选择: " choice
+
+    case $choice in
+        1)
+            mkdir -p /etc/docker
+            cat > /etc/docker/daemon.json <<EOF
+{
+    "registry-mirrors": ["https://registry.aliyuncs.com"]
+}
+EOF
+            docker_restart
+            echo "已设置为阿里云镜像源。"
+            ;;
+        2)
+            rm -f /etc/docker/daemon.json
+            docker_restart
+            echo "已恢复默认镜像源。"
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo "无效选择，请重新输入。"
+            ;;
+    esac
+}
+
 # Docker容器管理
 docker_container_manage() {
-    # Dcoker容器管理
     while true; do
         clear
         echo "Docker容器列表"
@@ -237,12 +343,16 @@ docker_container_manage() {
         echo "------------------------"
         echo "1. 创建新的容器"
         echo "------------------------"
-        echo "2. 启动指定容器             6. 启动所有容器"
-        echo "3. 停止指定容器             7. 暂停所有容器"
-        echo "4. 删除指定容器             8. 删除所有容器"
-        echo "5. 重启指定容器             9. 重启所有容器"
+        echo "2. 启动指定容器             9. 启动所有容器"
+        echo "3. 停止指定容器             10. 暂停所有容器"
+        echo "4. 删除指定容器             11. 删除所有容器"
+        echo "5. 重启指定容器             12. 重启所有容器"
+        echo "6. 备份指定容器             13. 备份所有容器"
+        echo "7. 恢复指定容器             14. 恢复所有容器"
+        echo "8. 清理指定容器日志         15. 清理所有容器日志"
         echo "------------------------"
-        echo "11. 进入指定容器           12. 查看容器日志           13. 查看容器网络"
+        echo "20. 查看容器资源使用情况    21. 进入指定容器"          
+        echo "22. 查看容器日志           23. 查看容器网络"
         echo "------------------------"
         echo "0. 返回上一级选单"
         echo "------------------------"
@@ -285,59 +395,91 @@ docker_container_manage() {
                         fi
                         ;;
                 esac
-                break_end
                 ;;
             6)
-                docker start $(docker ps -a -q)
-                break_end
+                read -p "请输入要备份的容器名: " container_name
+                read -p "请输入备份文件路径（包括文件名）: " backup_path
+                docker export $container_name > "$backup_path"
+                echo "容器 $container_name 已备份到 $backup_path"
                 ;;
             7)
-                # docker stop $(docker ps -q)
-                execute_check_command "stop" "all"
-                break_end
+                read -p "请输入要恢复的容器名: " container_name
+                read -p "请输入备份文件路径: " backup_path
+                docker import "$backup_path" $container_name
+                echo "容器 $container_name 已从 $backup_path 恢复"
                 ;;
             8)
+                read -p "请输入要清理日志的容器名: " container_name
+                truncate -s 0 $(docker inspect --format='{{.LogPath}}' $container_name)
+                echo "容器 $container_name 的日志已清理。"
+                ;;
+            9)
+                docker start $(docker ps -a -q)
+                ;;
+            10)
+                execute_check_command "stop" "all"
+                ;;
+            11)
                 if ask_confirmation "确定删除所有容器吗？"; then
                     docker rm -f $(docker ps -a -q) && echo "已删除所有容器。" || echo "删除操作失败。"
                 else
                     echo "操作已取消。"
                 fi
-                break_end
-                ;;
-            9)
-                execute_check_command "restart" "all"
-                break_end
-                ;;
-            11)
-                container_name=$(get_container_name_docker)
-                docker exec -it $container_name /bin/bash
-                break_end
                 ;;
             12)
-                container_name=$(get_container_name_docker)
-                docker logs $container_name
-                break_end
+                execute_check_command "restart" "all"
                 ;;
             13)
+                read -p "请输入备份目录路径: " backup_dir
+                mkdir -p "$backup_dir"
+                for container_id in $(docker ps -q); do
+                    container_name=$(docker inspect --format='{{.Name}}' $container_id | sed 's/^\///')
+                    backup_path="$backup_dir/$container_name.tar"
+                    docker export $container_id > "$backup_path"
+                    echo "容器 $container_name 已备份到 $backup_path"
+                done
+                ;;
+            14)
+                read -p "请输入备份目录路径: " backup_dir
+                for backup_file in "$backup_dir"/*.tar; do
+                    container_name=$(basename "$backup_file" .tar)
+                    docker import "$backup_file" $container_name
+                    echo "容器 $container_name 已从 $backup_file 恢复"
+                done
+                ;;
+            15)
+                find /var/lib/docker/containers/ -type f -name "*.log" -delete
+                echo "已清理所有容器日志。"
+                ;;
+            20)
+                show_container_resources
+                ;;
+            21)
+                container_name=$(get_container_name_docker)
+                docker exec -it $container_name /bin/bash
+                ;;
+            22)
+                container_name=$(get_container_name_docker)
+                docker logs $container_name
+                ;;
+            23)
                 echo ""
                 echo "------------------------------------------------------------"
-                display_network_info  
-                break_end  
+                display_network_info    
                 ;;
             0)
                 break  # 跳出循环，退出菜单
                 ;;
-
             *)
-                break  # 跳出循环，退出菜单
+                echo "无效选择，请重新输入。"
                 ;;
         esac
+        break_end
     done
 }
 
 # docker 镜像管理
 image_management() {
-    # Dcoker镜像管理
     while true; do
         clear
         echo "Docker镜像列表"
@@ -348,6 +490,8 @@ image_management() {
         echo "1. 获取或更新指定镜像"
         echo "2. 删除指定镜像"
         echo "3. 删除所有镜像"
+        echo "4. 导出镜像"
+        echo "5. 导入镜像"
         echo "------------------------"
         echo "0. 返回上一级选单"
         echo "------------------------"
@@ -378,12 +522,24 @@ image_management() {
                     echo "操作已取消。"  # 用户取消操作的提示
                 fi
                 ;;
+            4)
+                read -p "请输入要导出的镜像名: " imagename
+                read -p "请输入导出路径（包括文件名）: " exportpath
+                docker save -o "$exportpath" $imagename
+                echo "镜像已导出到 $exportpath"
+                break_end
+                ;; 
+            5)
+                read -p "请输入要导入的镜像文件路径: " importpath
+                docker load -i "$importpath"
+                echo "镜像已从 $importpath 导入"
+                break_end
+                ;;
             0)
                 break  # 跳出循环，退出菜单
                 ;;
-
             *)
-                break  # 跳出循环，退出菜单
+                echo "无效选择，请重新输入。"
                 ;;
         esac
         break_end
@@ -409,6 +565,7 @@ network_management() {
         echo "2. 加入网络"
         echo "3. 退出网络"
         echo "4. 删除网络"
+        echo "5. 查看网络详细信息"
         echo "------------------------"
         echo "0. 返回上一级选单"
         echo "------------------------"
@@ -456,6 +613,11 @@ network_management() {
                 fi
                 break_end
                 ;;
+            5)
+                read -p "请输入要查看的网络名: " dockernetwork
+                docker network inspect $dockernetwork
+                break_end
+                ;;
             0)
                 break  # 跳出循环，退出菜单
                 ;;
@@ -478,6 +640,8 @@ volume_management() {
         echo "------------------------"
         echo "1. 创建新卷"
         echo "2. 删除卷"
+        echo "3. 备份卷"
+        echo "4. 恢复卷"
         echo "------------------------"
         echo "0. 返回上一级选单"
         echo "------------------------"
@@ -505,14 +669,27 @@ volume_management() {
                     echo "取消删除操作。"
                 fi
                 ;;
+            3)
+                read -p "输入要备份的卷名: " vol_name
+                read -p "输入备份文件路径（包括文件名）: " backup_path
+                docker run --rm -v $vol_name:/volume -v $backup_path:/backup busybox tar czvf /backup/$vol_name.tar.gz -C /volume .
+                echo "卷 $vol_name 已备份到 $backup_path/$vol_name.tar.gz"
+                ;;
+            4)
+                read -p "输入要恢复的卷名: " vol_name
+                read -p "输入备份文件路径: " backup_path
+                docker run --rm -v $vol_name:/volume -v $backup_path:/backup busybox tar xzvf /backup/$vol_name.tar.gz -C /volume
+                echo "卷 $vol_name 已从 $backup_path/$vol_name.tar.gz 恢复"
+                ;;
             0)
                 break  # 跳出循环，退出菜单
                 ;;
 
             *)
-                break  # 跳出循环，退出菜单
+                echo "无效选择，请重新输入。"
                 ;;
         esac
+        break_end
     done
 }
 
@@ -526,8 +703,7 @@ review_prune_candidates() {
 
     echo "即将删除以下未使用的网络："
     echo "NETWORK ID    NAME                DRIVER              SCOPE"
-    docker network ls --filter type=custom --format "{{.ID}}" | while read network_id
-    do
+    docker network ls --filter type=custom --format "{{.ID}}" | while read network_id; do
         # 忽略在网络详情查找过程中的错误信息
         network_details=$(docker network inspect $network_id --format '{{.ID}} {{.Name}} {{.Driver}} {{.Scope}}' 2>/dev/null)
         if [[ -n $network_details ]]; then
@@ -603,6 +779,45 @@ docker_ipv6_off() {
     echo "Docker已关闭IPv6访问"
 }
 
+# 功能：监控和警报
+monitor_and_alert() {
+    clear
+    echo "监控和警报"
+    echo "------------------------"
+    echo "1. 启动监控"
+    echo "2. 停止监控"
+    echo "------------------------"
+    echo "0. 返回上一级选单"
+    echo "------------------------"
+    read -p "请输入你的选择: " choice
+
+    case $choice in
+        1)
+            read -p "请输入要监控的容器名: " container_name
+            read -p "请输入监控间隔（秒）: " interval
+            read -p "请输入警报命令: " alert_command
+            while true; do
+                if ! docker ps | grep -q $container_name; then
+                    eval $alert_command
+                    break
+                fi
+                sleep $interval
+            done &  # 后台运行
+            echo "监控已启动。"
+            ;;
+        2)
+            pkill -f "while true; do if ! docker ps | grep -q"
+            echo "监控已停止。"
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo "无效选择，请重新输入。"
+            ;;
+    esac
+}
+
 # 卸载Docker环境
 uninstall_docker() {
     clear
@@ -625,13 +840,15 @@ uninstall_docker() {
             echo "清除所有未使用的网络..."
             docker network prune -f 2>/dev/null || true
 
-            # 根据安装的包管理器选择卸载命令
-            if command -v apt-get &>/dev/null; then
-                sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-                sudo apt-get autoremove -y
+            # 根据安装的包管理器选择卸载命
+            if command -v apt &>/dev/null; then
+                sudo apt purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-compose
+                sudo apt autoremove -y
             elif command -v yum &>/dev/null; then
                 sudo yum remove -y docker docker-client docker-client-latest docker-common \
-                docker-latest docker-latest-logrotate docker-logrotate docker-engine
+                docker-latest docker-latest-logrotate docker-logrotate docker-engine docker-compose
+            elif command -v dnf &>/dev/null; then
+                sudo dnf remove -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-compose
             elif command -v apk &>/dev/null; then
                 sudo apk del docker docker-compose
             else
@@ -643,7 +860,7 @@ uninstall_docker() {
             sudo rm -rf /var/lib/docker /var/lib/containerd
 
             echo $PATH  # 查看当前PATH变量
-            export PATH=$(echo $PATH | sed -e 's/:\/path\/to\/docker//')  # 移除docker路径
+            export PATH=$(echo $PATH | sed -e 's|:/usr/local/bin/docker-compose||')  # 移除docker路径
 
             echo "Docker已成功卸载。"
             ;;
@@ -674,11 +891,15 @@ docker_manage() {
         echo "7. 清理无用的docker容器和镜像网络数据卷"
         echo "------------------------"	
         echo "8. 更换Dcoker源"	
-        echo "------------------------"	
+        echo "------------------------"	        
         echo "30. 开启Docker-ipv6访问"	
         echo "31. 关闭Docker-ipv6访问"	
         echo "------------------------"	
-        echo "50. 卸载Dcoker环境"	
+        echo "40. Docker Compose 项目管理"	
+        echo "------------------------"	
+        echo "50. 监控和警报"	
+        echo "------------------------"	
+        echo "60. 卸载Dcoker环境"	
         echo "------------------------"		
         echo "0. 返回主菜单"
         echo "------------------------"
@@ -688,47 +909,35 @@ docker_manage() {
             1)
                 clear
                 update_docker
-                break_end
                 ;;
             2)
                 clear
                 if check_docker_installed; then
                     state_docker
-                    break_end
-                else
-                    break_end
                 fi
                 ;;
             3)
                 clear
                 if check_docker_installed; then
                     docker_container_manage
-                else
-                    break_end
                 fi
                 ;;
             4)
                 clear
                 if check_docker_installed; then
                     image_management
-                else
-                    break_end
                 fi
                 ;;
             5)
                 clear
                 if check_docker_installed; then
                     network_management
-                else
-                    break_end
                 fi
                 ;;
             6)
                 clear
                 if check_docker_installed; then
                     volume_management
-                else
-                    break_end
                 fi
                 ;;
             7)
@@ -736,32 +945,36 @@ docker_manage() {
                 if check_docker_installed; then
                     clean_volume_network_container
                 fi
-                break_end
                 ;;
             8)
-                clear                
-                bash <(curl -sSL https://linuxmirrors.cn/docker.sh)
+                clear
+                set_docker_source
                 ;;
             30)
                 clear   
                 if check_docker_installed; then
                     docker_ipv6_on
-                else
-                    break_end
                 fi             
                 ;;
             31)
                 clear
                 if check_docker_installed; then
                     docker_ipv6_off
-                else
-                    break_end
+                fi               
+                ;;
+            40)
+                clear
+                if check_docker_compose_installed; then
+                    manage_docker_compose
                 fi               
                 ;;
             50)
                 clear
+                monitor_and_alert
+                ;;
+            60)
+                clear
                 uninstall_docker
-                break_end
                 ;;
             0)
                 break
@@ -770,28 +983,29 @@ docker_manage() {
                 echo "无效的输入!"
                 ;;
         esac
+        break_end
     done 
 }
 
 # 主逻辑
 case "$1" in
-        update)
-            update_docker
-            ;;
-        state)
-            if check_docker_installed; then
-                state_docker
-            else
-                echo "Docker is not installed."
-            fi
-            ;;
-        uninstall)
-            uninstall_docker
-            ;;
-        manage)
-            docker_manage
-            ;;
-        *)
-            echo "Usage: $0 {update|state|uninstall|manage}"
-            exit 1
-    esac
+    update)
+        update_docker
+        ;;
+    state)
+        if check_docker_installed; then
+            state_docker
+        else
+            echo "Docker is not installed."
+        fi
+        ;;
+    uninstall)
+        uninstall_docker
+        ;;
+    manage)
+        docker_manage
+        ;;
+    *)
+        echo "Usage: $0 {update|state|uninstall|manage}"
+        exit 1
+esac
