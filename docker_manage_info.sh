@@ -181,8 +181,11 @@ backup_container() {
 get_container_config() {
     local container_name="$1"
 
-    docker inspect "$container_name" --format '{{json .NetworkSettings.Networks}}' > "/tmp/${container_name}_network_config.json"
-    docker inspect "$container_name" --format '{{json .Mounts}}' > "/tmp/${container_name}_volume_config.json"
+    network_settings=$(docker inspect --format '{{json .NetworkSettings.Networks}}' "$container_name")
+    echo "$network_settings" > "/tmp/${container_name}_network_config.json"
+
+    volume_settings=$(docker inspect --format '{{json .Mounts}}' "$container_name")
+    echo "$volume_settings" > "/tmp/${container_name}_volume_config.json"
 }
 
 # 函数：恢复容器
@@ -209,7 +212,7 @@ restore_container() {
     run_options=""
 
     # 处理网络配置
-    if [ -n "$original_network_settings" ]; then
+    if [ -n "$original_network_settings" ] && [ "$original_network_settings" != "null" ]; then
         network_names=$(echo $original_network_settings | grep -oP '"\K[^"]+(?=": {)')
         for network in $network_names; do
             run_options="$run_options --network $network"
@@ -217,12 +220,12 @@ restore_container() {
     fi
 
     # 处理挂载卷
-    if [ -n "$original_volumes" ]; then
-        for volume in $(echo $original_volumes | grep -oP '"Source": "\K[^"]+' | awk -v dest="$(echo $original_volumes | grep -oP '"Destination": "\K[^"]+')" '{print $0 " " dest}'); do
-            source=$(echo $volume | awk '{print $1}')
-            destination=$(echo $volume | awk '{print $2}')
+    if [ -n "$original_volumes" ] && [ "$original_volumes" != "null" ]; then
+        while IFS= read -r volume; do
+            source=$(echo $volume | grep -oP '"Source": "\K[^"]+')
+            destination=$(echo $volume | grep -oP '"Destination": "\K[^"]+')
             run_options="$run_options -v $source:$destination"
-        done
+        done <<< "$(echo $original_volumes | grep -oP '{[^}]+}')"
     fi
 
     # 创建并启动新容器，保持原有容器名称和设置
