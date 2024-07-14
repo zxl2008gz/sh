@@ -177,6 +177,58 @@ backup_container() {
     fi
 }
 
+# 功能：恢复单个容器
+restore_single_container() {
+    local container_name="$1"
+    local backup_path="$2"
+    local backup_file
+
+    cd "$backup_path"
+    echo "可用的备份文件（.tar格式）："
+    ls *.tar
+    read -p "请输入要恢复的文件名: " file_name
+    backup_file="$backup_path/$file_name"
+
+    new_image_name="${container_name}_recovered_image"
+    docker import "$backup_file" $new_image_name
+    echo "已从 $backup_file 导入镜像 $new_image_name"
+
+    # 获取原容器的配置信息
+    original_container_info=$(docker inspect $container_name)
+    original_network_settings=$(echo $original_container_info | jq '.[0].NetworkSettings.Networks')
+    original_volumes=$(echo $original_container_info | jq '.[0].Mounts')
+
+    # 停止并删除原容器
+    if docker ps -a | grep -q $container_name; then
+        docker stop $container_name
+        docker rm $container_name
+    fi
+
+    # 准备运行命令选项
+    run_options=""
+
+    # 处理网络配置
+    if [ -n "$original_network_settings" ]; then
+        network_names=$(echo $original_network_settings | jq -r 'keys[]')
+        for network in $network_names; do
+            run_options="$run_options --network $network"
+        done
+    fi
+
+    # 处理挂载卷
+    if [ -n "$original_volumes" ]; then
+        for volume in $(echo $original_volumes | jq -c '.[]'); do
+            source=$(echo $volume | jq -r '.Source')
+            destination=$(echo $volume | jq -r '.Destination')
+            run_options="$run_options -v $source:$destination"
+        done
+    fi
+
+    # 创建并启动新容器，保持原有容器名称和设置
+    docker run --name $container_name $run_options -d $new_image_name
+    echo "容器 $container_name 已恢复并启动"
+}
+
 # 功能：检查并创建网络
 check_and_create_networks() {
     # 获取所有正在运行的容器ID
@@ -431,12 +483,7 @@ docker_container_manage() {
             7)
                 read -p "请输入要恢复的容器名: " container_name
                 read -p "请输入备份目录路径: " backup_path
-                cd $backup_path
-                echo "可用的备份文件（.tar格式）："
-                ls *.tar
-                read -p "请输入要恢复的文件名: " file_name
-                docker import "$backup_path/$file_name" $container_name
-                echo "容器 $container_name 已从 $backup_path 恢复"
+                restore_single_container $container_name $backup_path
                 ;;
             8)
                 read -p "请输入要清理日志的容器名: " container_name
@@ -473,8 +520,7 @@ docker_container_manage() {
                 read -p "请输入备份目录路径: " backup_dir
                 for backup_file in "$backup_dir"/*.tar; do
                     container_name=$(basename "$backup_file" .tar)
-                    docker import "$backup_file" $container_name
-                    echo "容器 $container_name 已从 $backup_file 恢复"
+                    restore_single_container $container_name "$backup_file"
                 done
                 ;;
             15)
