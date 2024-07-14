@@ -228,9 +228,9 @@ restore_container() {
     # 处理挂载卷
     if [ -n "$original_volumes" ] && [ "$original_volumes" != "null" ]; then
         volumes=$(echo $original_volumes | grep -oP '"Source":"\K[^"]+' | sed 'N;s/\n/ /' )
-        for volume in $volumes; do
-            source=$(echo $volume | awk '{print $1}')
-            destination=$(echo $volume | awk '{print $2}')
+        for volume in $(echo $original_volumes | grep -oP '{"Source":"[^"]+","Destination":"[^"]+"' | sed 's/{//g' | sed 's/}//g' | sed 's/"//g'); do
+            source=$(echo $volume | awk -F, '{print $1}' | awk -F: '{print $2}')
+            destination=$(echo $volume | awk -F, '{print $2}' | awk -F: '{print $2}')
             run_options="$run_options -v $source:$destination"
         done
     fi
