@@ -1,857 +1,133 @@
 #!/bin/bash
 
-# 设置严格模式
-set -euo pipefail
-
-# 版本信息
-VERSION="1.0.0"
-
-# 加载配置文件
-CONFIG_FILE="/etc/docker_manager.conf"
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-fi
+# 在文件开头添加日志功能
+LOG_FILE="/var/log/docker_manage.log"
+LOG_MAX_SIZE=10485760  # 10MB
 
 # 日志函数
 log() {
     local level="$1"
     local message="$2"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $message" >> /var/log/docker_manager.log
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
+    
+    # 日志轮转
+    if [ -f "$LOG_FILE" ] && [ $(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE") -gt $LOG_MAX_SIZE ]; then
+        mv "$LOG_FILE" "${LOG_FILE}.old"
+    fi
 }
 
-# 颜色设置
-COLOR_YELLOW='\033[33m'
-COLOR_WHITE='\033[0m'
-COLOR_GREEN_DARK='\033[0;32m'
-COLOR_BLUE_LIGHT='\033[0;34m'
-COLOR_RED_DARK='\033[31m'
-COLOR_GRAY='\e[37m'
-COLOR_PINK='\033[35m'
-COLOR_GREEN_FLASHING='\033[32m\033[5m'
+# 定义颜色变量
+huang='\033[33m'
+bai='\033[0m'
+lv='\033[0;32m'
+lan='\033[0;34m'
+hong='\033[31m'
+lianglan='\033[96m'
+hui='\e[37m'
 
-# 使用颜色
-print_color() {
-    local color="$1"
-    local text="$2"
-    echo -e "${color}${text}${COLOR_WHITE}"
+# 增强的错误处理函数
+handle_error() {
+    local error_message="$1"
+    local error_code="${2:-1}"
+    echo -e "${hong}错误: ${error_message}${bai}" >&2
+    log "ERROR" "$error_message"
+    return $error_code
 }
 
-# 错误处理
-error_exit() {
-    log "ERROR" "$1"
-    print_color "$COLOR_RED_DARK" "错误: $1"
-    exit 1
+# 成功消息函数
+show_success() {
+    local message="$1"
+    echo -e "${lv}${message}${bai}"
 }
 
-# 函数：退出
+# 等待用户输入函数
 break_end() {
-    echo -e "${COLOR_GREEN_DARK}操作完成${COLOR_WHITE}"
-    print_color "$COLOR_RED_DARK" "操作完成" "${COLOR_WHITE}"
+    show_success "操作完成"
     echo "按任意键继续..."
     read -n 1 -s -r -p ""
     echo
     clear
 }
 
-# 检查Docker是否安装
-check_docker_installed() {
+# 检查Docker是否安装及其状态
+check_docker_status() {
     if ! command -v docker &>/dev/null; then
-        error_exit "Docker 未安装。"
-    fi
-}
-
-# 获取用户确认
-ask_confirmation() {
-    local prompt="$1"
-    local choice
-    while true; do
-        read -rp "$prompt (Y/N): " choice
-        case "${choice,,}" in
-            y|yes) return 0 ;;
-            n|no) return 1 ;;
-            *) print_color "$COLOR_RED_DARK" "无效的选择，请输入 Y 或 N。" ;;
-        esac
-    done
-}
-
-# 限制Docker日志大小
-limit_log() {
-    local config_file="/etc/docker/daemon.json"
-    local temp_file=$(mktemp)
-    
-    if [[ -f "$config_file" ]]; then
-        cp "$config_file" "$temp_file"
-    else
-        echo "{}" > "$temp_file"
+        handle_error "Docker 未安装"
+        return 1
     fi
 
-    # 使用 sed 来修改 JSON 文件
-    sed -i 's/\(.*\)}/\1,/' "$temp_file"  # 如果文件不为空，在最后添加逗号
-    cat << EOF >> "$temp_file"
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "20m",
-    "max-file": "3"
-  },
-  "ipv6": true,
-  "fixed-cidr-v6": "fd00:dead:beef:c0::/80",
-  "experimental": true,
-  "ip6tables": true
-}
-EOF
-
-    mv "$temp_file" "$config_file"
-    log "INFO" "Docker日志大小已限制"
-}
-
-# 更新Docker
-update_docker() {
-    log "INFO" "开始更新Docker"
-    
-    if [[ -f "/etc/alpine-release" ]]; then
-        apk update || error_exit "无法更新包索引"
-        apk add docker || error_exit "无法安装Docker"
-        rc-update add docker default || error_exit "无法将Docker添加到默认运行级别"
-        limit_log
-        service docker start || rc-service docker start || error_exit "无法启动Docker服务"
-        apk add docker-compose || error_exit "无法安装Docker Compose"
-    else
-        curl -fsSL https://get.docker.com | sh || error_exit "无法安装Docker"
-        LATEST_COMPOSE=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
-        curl -L "https://github.com/docker/compose/releases/download/${LATEST_COMPOSE}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose || error_exit "无法下载Docker Compose"
-        chmod +x /usr/local/bin/docker-compose || error_exit "无法设置Docker Compose可执行权限"
-        
-        if command -v systemctl &>/dev/null; then
-            systemctl start docker || error_exit "无法启动Docker服务"
-            systemctl enable docker || error_exit "无法设置Docker开机自启"
-            limit_log
-        fi
-    fi
-    
-    log "INFO" "Docker更新完成"
-}
-
-# Docker状态检查
-state_docker() {
-    check_docker_installed
-    
-    print_color "$COLOR_BLUE_LIGHT" "Docker 版本:"
-    docker --version
-    if command -v docker-compose &>/dev/null; then
-        docker-compose --version
-    else
-        print_color "$COLOR_YELLOW" "docker-compose 未安装。"
-    fi
-    
-    print_color "$COLOR_BLUE_LIGHT" "Docker 镜像列表:"
-    docker image ls
-    
-    print_color "$COLOR_BLUE_LIGHT" "Docker 容器列表:"
-    docker ps -a
-    
-    print_color "$COLOR_BLUE_LIGHT" "Docker 卷列表:"
-    docker volume ls
-    
-    print_color "$COLOR_BLUE_LIGHT" "Docker 网络列表:"
-    docker network ls
-}
-
-# 功能：获取容器名
-get_container_name_docker() {
-    read -p "请输入容器名: " dockername
-    echo $dockername
-}
-
-# 功能：备份容器
-backup_container() {
-    local container_name="$1"
-    local backup_path="$2"
-    local backup_file
-    local current_date
-
-    # 获取当前日期
-    current_date=$(date +"%Y%m%d_%H%M%S")
-
-    # 确保备份路径包含文件名
-    if [[ "$backup_path" == */ ]]; then
-        # 如果用户输入的是目录，则生成一个默认的备份文件名
-        backup_file="${backup_path}${container_name}_backup_${current_date}.tar"
-    else
-        # 否则使用用户输入的完整路径和文件名，但在文件名中添加日期
-        backup_file="${backup_path%.*}_${current_date}.${backup_path##*}.tar"
+    if ! docker info &>/dev/null; then
+        handle_error "Docker 守护进程未运行"
+        return 2
     fi
 
-    docker export $container_name > "$backup_file"
-    if [ $? -eq 0 ]; then
-        echo "容器 $container_name 已备份到 $backup_file"
-    else
-        echo "备份容器 $container_name 失败。"
-    fi
+    return 0
 }
 
-# 函数：获取容器配置信息
-get_container_config() {
-    local container_name="$1"
-
-    docker inspect --format '{{json .NetworkSettings.Networks}}' "$container_name" > "/tmp/${container_name}_network_config.json"
-    docker inspect --format '{{json .Mounts}}' "$container_name" > "/tmp/${container_name}_volume_config.json"
-    docker inspect --format '{{json .Config.Cmd}}' "$container_name" > "/tmp/${container_name}_cmd_config.json"
-    docker inspect --format '{{json .Config.Env}}' "$container_name" > "/tmp/${container_name}_env_config.json"
-}
-
-# 恢复容器函数
-restore_container() {
-    local container_name="$1"
-    local backup_path="$2"
-
-    cd "$backup_path"
-    echo "可用的备份文件（.tar格式）："
-    ls *.tar
-    read -p "请输入要恢复的文件名: " file_name
-    new_image_name="${container_name}_recovered_image"
-    docker import "$backup_path/$file_name" $new_image_name
-    echo "已从 $backup_path/$file_name 导入镜像 $new_image_name"
-
-    # 获取原容器的配置信息
-    get_container_config $container_name
-
-    original_network_settings=$(cat "/tmp/${container_name}_network_config.json")
-    original_volumes=$(cat "/tmp/${container_name}_volume_config.json")
-    original_cmd=$(cat "/tmp/${container_name}_cmd_config.json")
-    original_env=$(cat "/tmp/${container_name}_env_config.json")
-
-    # 停止并删除原容器
-    if docker ps -a | grep -q $container_name; then
-        docker stop $container_name
-        docker rm $container_name
-    fi
-
-    # 准备运行命令选项
-    run_options=""
-
-    # 处理挂载卷
-    if [ -n "$original_volumes" ] && [ "$original_volumes" != "null" ]; then
-        volumes=$(echo $original_volumes | grep -oP '"Source":"\K[^"]+' | sed 'N;s/\n/ /' )
-        for volume in $(echo $original_volumes | grep -oP '{"Source":"[^"]+","Destination":"[^"]+"' | sed 's/{//g' | sed 's/}//g' | sed 's/"//g'); do
-            source=$(echo $volume | awk -F, '{print $1}' | awk -F: '{print $2}')
-            destination=$(echo $volume | awk -F, '{print $2}' | awk -F: '{print $2}')
-            if [ -n "$source" ] && [ -n "$destination" ]; then
-                run_options="$run_options -v $source:$destination"
-            fi
-        done
-    fi
-
-    # 处理环境变量
-    if [ -n "$original_env" ] && [ "$original_env" != "null" ]; then
-        env_vars=$(echo $original_env | grep -oP '"\K[^"]+(?=")' )
-        for env in $env_vars; do
-            run_options="$run_options -e $env"
-        done
-    fi
-
-    # 处理运行命令
-    if [ -n "$original_cmd" ] && [ "$original_cmd" != "null" ];then
-        original_cmd=$(echo $original_cmd | sed 's/[][]//g' | sed 's/,/ /g')
-    fi
-
-    # 创建并启动新容器，省略复杂的网络配置
-    docker run --name $container_name $run_options -d $new_image_name $original_cmd
-    echo "容器 $container_name 已从 $backup_path 恢复并启动"
-}
-
-# 功能：检查并创建网络
-check_and_create_networks() {
-    # 获取所有正在运行的容器ID
-    local container_ids=$(docker ps -aq)
-
-    # 声明一个关联数组以存储网络名称
-    declare -A network_exists
-
-    # 获取现有网络列表
-    local existing_networks=$(docker network ls --format '{{.Name}}')
-    for net in $existing_networks; do
-        network_exists["$net"]=1
-    done
-
-    # 检查每个容器使用的网络，并确保它们存在
-    for id in $container_ids; do
-        # 使用正确的命令格式获取每个容器的网络名称
-        local networks=$(docker inspect $id --format '{{range $key, $_ := .NetworkSettings.Networks}}{{$key}} {{end}}')
-        for net_name in $networks; do
-            if [ -z "${network_exists[$net_name]}" ]; then
-                echo "网络 '$net_name' 不存在，正在创建..."
-                if docker network create "$net_name"; then
-                    echo "已创建网络: $net_name"
-                    network_exists["$net_name"]=1
-                else
-                    echo "创建网络 '$net_name' 失败"
-                fi
-            fi
-        done
-    done
-}
-
-# 功能：执行 Docker 命令
-execute_check_command() {
-    local command="$1"
-    local container_name_or_all="$2"  # 可以是单个容器的名称/ID，或者是 'all' 表示所有容器
-
-    if [[ "$container_name_or_all" == "all" ]]; then
-        # 对所有容器执行命令
-        if [[ "$command" == "stop" || "$command" == "restart" ]]; then
-            local containers=$(docker ps -q)
-            if [ -z "$containers" ]; then
-                echo "没有正在运行的容器，无法执行 $command 操作。"
-                return 1  # 返回非零退出代码表示错误
-            fi
-            # 执行对所有容器的命令
-            docker $command $containers
-        else
-            echo "命令 '$command' 不支持 'all' 选项。"
-            return 1
-        fi
-    else
-        # 对单个容器执行命令
-        docker $command $container_name_or_all
-    fi
-
-    local exit_code=$?
-    if [ $exit_code -eq 0 ]; then
-        echo "操作成功。"
-    else
-        echo "操作失败，请检查容器名或ID是否正确。"
-    fi
-}
-
-# 函数: 显示所有容器的网络信息
-display_network_info() {
-    local container_ids=$(docker ps -aq)  # 显示所有容器，包括非运行状态的容器
-    printf "%-25s %-30s %-25s\n" "容器名称" "网络名称" "IP地址"  # 调整了网络名称列的宽度
-
-    for container_id in $container_ids; do
-        # 获取容器的名称和网络信息
-        local container_info=$(docker inspect --format '{{ .Name }}{{ range $network, $config := .NetworkSettings.Networks }} {{ printf "%s %s" $network .IPAddress }}{{ end }}' $container_id | sed 's/^\///')
-
-        # 分离出容器名称
-        local container_name=$(echo "$container_info" | awk '{print $1}')
-
-        # 分离出网络信息并处理每一条
-        local network_info=$(echo "$container_info" | awk '{for (i=2; i<=NF; i+=2) print $i, $(i+1)}')
-        while IFS= read -r line; do
-            local network_name=$(echo "$line" | awk '{print $1}')
-            local ip_address=$(echo "$line" | awk '{print $2}')
-            printf "%-21s %-26s %-25s\n" "$container_name" "$network_name" "$ip_address"
-        done <<< "$network_info"
-    done
-}
-
-# 功能：显示容器资源使用情况
-show_container_resources() {
-    clear
-    echo "容器资源使用情况："
-    docker stats --no-stream
-}
-
-# 功能：检查 Docker Compose 是否已安装
-check_docker_compose_installed() {
-    if ! command -v docker-compose &>/dev/null; then
-        echo "Docker Compose 未安装。请先安装 Docker Compose。"
+# 验证容器名称是否有效
+validate_container_name() {
+    local name="$1"
+    if [[ ! "$name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]+$ ]]; then
+        handle_error "无效的容器名称。只允许字母、数字、下划线、点和横线，且必须以字母或数字开头"
         return 1
     fi
     return 0
 }
 
-# Docker Compose 项目管理
-manage_docker_compose() {
-    if check_docker_compose_installed; then
-        clear
-        echo "Docker Compose 项目管理"
-        echo "------------------------"
-        echo "1. 启动 Docker Compose 项目"
-        echo "2. 停止 Docker Compose 项目"
-        echo "3. 查看 Docker Compose 日志"
-        echo "------------------------"
-        echo "0. 返回上一级选单"
-        echo "------------------------"
-        read -p "请输入你的选择: " choice
+# 增强的确认函数
+ask_confirmation() {
+    local prompt="$1"
+    local default="${2:-N}"  # 默认为N
+    local choice
 
-        case $choice in
-            1)
-                read -p "请输入 docker-compose.yml 文件所在目录: " compose_dir
-                read -p "请输入 Docker Compose 文件名（默认为 docker-compose.yml）: " compose_file
-                compose_file=${compose_file:-docker-compose.yml}
-                (cd "$compose_dir" && sudo docker-compose -f "$compose_file" up -d)
-                ;;
-            2)
-                read -p "请输入 docker-compose.yml 文件所在目录: " compose_dir
-                read -p "请输入 Docker Compose 文件名（默认为 docker-compose.yml）: " compose_file
-                compose_file=${compose_file:-docker-compose.yml}
-                (cd "$compose_dir" && sudo docker-compose -f "$compose_file" down)
-                ;;
-            3)
-                read -p "请输入 docker-compose.yml 文件所在目录: " compose_dir
-                read -p "请输入 Docker Compose 文件名（默认为 docker-compose.yml）: " compose_file
-                compose_file=${compose_file:-docker-compose.yml}
-                (cd "$compose_dir" && sudo docker-compose -f "$compose_file" logs)
-                ;;
-            0)
-                return
-                ;;
-            *)
-                echo "无效选择，请重新输入。"
-                ;;
+    while true; do
+        read -p "$prompt (y/n) [${default}]: " choice
+        choice=${choice:-$default}
+        case "${choice,,}" in  # 转换为小写
+            y|yes) return 0 ;;
+            n|no) return 1 ;;
+            *) echo "请输入 y 或 n" ;;
         esac
-    fi
+    done
 }
 
-# 功能：设置 Docker 源
-set_docker_source() {
-    clear
-    echo "Docker 源管理"
-    echo "------------------------"
-    echo "1. 设置国内源（阿里云）"
-    echo "2. 恢复默认源"
-    echo "------------------------"
-    echo "0. 返回上一级选单"
-    echo "------------------------"
-    read -p "请输入你的选择: " choice
+# 检查并限制Docker日志大小
+setup_docker_logging() {
+    local max_size="${1:-20m}"
+    local max_file="${2:-3}"
+    
+    local daemon_config="/etc/docker/daemon.json"
+    local temp_config="/tmp/daemon.json"
 
-    case $choice in
-        1)
-            mkdir -p /etc/docker
-            cat > /etc/docker/daemon.json <<EOF
+    # 确保目录存在
+    mkdir -p /etc/docker
+
+    # 如果配置文件存在，保留现有配置
+    if [ -f "$daemon_config" ]; then
+        jq --arg size "$max_size" --arg files "$max_file" '.["log-driver"]="json-file" | .["log-opts"]["max-size"]=$size | .["log-opts"]["max-file"]=$files' "$daemon_config" > "$temp_config"
+    else
+        # 创建新配置
+        cat > "$temp_config" <<EOF
 {
-    "registry-mirrors": ["https://registry.aliyuncs.com"]
+    "log-driver": "json-file",
+    "log-opts": {
+        "max-size": "$max_size",
+        "max-file": "$max_file"
+    }
 }
 EOF
-            docker_restart
-            echo "已设置为阿里云镜像源。"
-            ;;
-        2)
-            rm -f /etc/docker/daemon.json
-            docker_restart
-            echo "已恢复默认镜像源。"
-            ;;
-        0)
-            return
-            ;;
-        *)
-            echo "无效选择，请重新输入。"
-            ;;
-    esac
-}
-
-# Docker容器管理
-docker_container_manage() {
-    while true; do
-        clear
-        echo "Docker容器列表"
-        docker ps -a
-        echo ""
-        echo "容器操作"
-        echo "------------------------"
-        echo "1. 创建新的容器"
-        echo "------------------------"
-        echo "2. 启动指定容器             9. 启动所有容器"
-        echo "3. 停止指定容器             10. 暂停所有容器"
-        echo "4. 删除指定容器             11. 删除所有容器"
-        echo "5. 重启指定容器             12. 重启所有容器"
-        echo "6. 备份指定容器             13. 备份所有容器"
-        echo "7. 恢复指定容器             14. 恢复所有容器"
-        echo "8. 清理指定容器日志         15. 清理所有容器日志"
-        echo "------------------------"
-        echo "20. 查看容器资源使用情况    21. 进入指定容器"          
-        echo "22. 查看容器日志           23. 查看容器网络"
-        echo "------------------------"
-        echo "0. 返回上一级选单"
-        echo "------------------------"
-        read -p "请输入你的选择: " sub_choice
-
-        case $sub_choice in
-            1)
-                read -p "请输入创建命令: " docker_command
-                eval $docker_command
-                ;;						
-             2|3|4|5)
-                container_name=$(get_container_name_docker)
-                case $sub_choice in
-                    2)
-                        check_and_create_networks
-                        execute_check_command "start" $container_name
-                        if docker ps | grep -q $container_name; then
-                            echo "容器已成功启动。"
-                        else
-                            echo "容器启动失败。"
-                        fi
-                        ;;
-                    3)
-                        execute_check_command "stop" $container_name
-                        if ! docker ps | grep -q $container_name; then
-                            echo "容器已成功停止。"
-                        else
-                            echo "容器停止失败。"
-                        fi
-                        ;;
-                    4)
-                        execute_check_command "rm -f" $container_name
-                        ;;
-                    5)
-                        execute_check_command "restart" $container_name
-                        if docker ps | grep -q $container_name; then
-                            echo "容器已成功重启。"
-                        else
-                            echo "容器重启失败。"
-                        fi
-                        ;;
-                esac
-                ;;
-            6)
-                container_name=$(get_container_name_docker)
-                read -p "请输入备份目录路径: " backup_path
-                backup_container $container_name $backup_path
-                ;;
-            7)
-                container_name=$(get_container_name_docker)
-                read -p "请输入备份目录路径: " backup_path
-                restore_container $container_name $backup_path
-                ;;
-            8)
-                read -p "请输入要清理日志的容器名: " container_name
-                truncate -s 0 $(docker inspect --format='{{.LogPath}}' $container_name)
-                echo "容器 $container_name 的日志已清理。"
-                ;;
-            9)
-                docker start $(docker ps -a -q)
-                ;;
-            10)
-                execute_check_command "stop" "all"
-                ;;
-            11)
-                if ask_confirmation "确定删除所有容器吗？"; then
-                    docker rm -f $(docker ps -a -q) && echo "已删除所有容器。" || echo "删除操作失败。"
-                else
-                    echo "操作已取消。"
-                fi
-                ;;
-            12)
-                execute_check_command "restart" "all"
-                ;;
-            13)
-                read -p "请输入备份目录路径: " backup_dir
-                mkdir -p "$backup_dir"
-                for container_id in $(docker ps -q); do
-                    container_name=$(docker inspect --format='{{.Name}}' $container_id | sed 's/^\///')
-                    backup_path="$backup_dir/${container_name}_backup_$(date +"%Y%m%d_%H%M%S").tar"
-                    docker export $container_id > "$backup_path"
-                    echo "容器 $container_name 已备份到 $backup_path"
-                done
-                ;;
-            14)
-                read -p "请输入备份目录路径: " backup_dir
-                for backup_file in "$backup_dir"/*.tar; do
-                    container_name=$(basename "$backup_file" .tar)
-                    restore_container $container_name $backup_dir
-                done
-                ;;
-            15)
-                find /var/lib/docker/containers/ -type f -name "*.log" -delete
-                echo "已清理所有容器日志。"
-                ;;
-            20)
-                show_container_resources
-                ;;
-            21)
-                container_name=$(get_container_name_docker)
-                docker exec -it $container_name /bin/bash
-                ;;
-            22)
-                container_name=$(get_container_name_docker)
-                docker logs $container_name
-                ;;
-            23)
-                echo ""
-                echo "------------------------------------------------------------"
-                display_network_info    
-                ;;
-            0)
-                break  # 跳出循环，退出菜单
-                ;;
-            *)
-                echo "无效选择，请重新输入。"
-                ;;
-        esac
-        break_end
-    done
-}
-
-# docker 镜像管理
-image_management() {
-    while true; do
-        clear
-        echo "Docker镜像列表"
-        docker image ls
-        echo ""
-        echo "镜像操作"
-        echo "------------------------"
-        echo "1. 获取或更新指定镜像"
-        echo "2. 删除指定镜像"
-        echo "3. 删除所有镜像"
-        echo "4. 导出镜像"
-        echo "5. 导入镜像"
-        echo "------------------------"
-        echo "0. 返回上一级选单"
-        echo "------------------------"
-        read -p "请输入你的选择: " sub_choice
-
-        case $sub_choice in
-            1)
-                read -p "请输入镜像名: " dockername
-                docker pull $dockername
-                ;;
-            2)
-                read -p "请输入镜像名: " dockername
-                if docker rmi -f $dockername; then
-                    echo "镜像已删除。"
-                else
-                    echo "删除镜像失败。"
-                fi
-                ;;
-            3)
-                if ask_confirmation "确定删除所有镜像吗？"; then
-                    if [ -n "$(docker images -q)" ]; then  # 检查是否有镜像
-                        docker rmi -f $(docker images -q)
-                        echo "所有镜像已删除。"
-                    else
-                        echo "没有可删除的镜像。"  # 当不存在任何镜像时的提示
-                    fi
-                else
-                    echo "操作已取消。"  # 用户取消操作的提示
-                fi
-                ;;
-            4)
-                read -p "请输入要导出的镜像名: " imagename
-                read -p "请输入导出路径（包括文件名）: " exportpath
-                docker save -o "$exportpath" $imagename
-                echo "镜像已导出到 $exportpath"
-                break_end
-                ;; 
-            5)
-                read -p "请输入要导入的镜像文件路径: " importpath
-                docker load -i "$importpath"
-                echo "镜像已从 $importpath 导入"
-                break_end
-                ;;
-            0)
-                break  # 跳出循环，退出菜单
-                ;;
-            *)
-                echo "无效选择，请重新输入。"
-                ;;
-        esac
-        break_end
-    done
-}
-
-# docker 网络管理
-network_management() {
-    # Dcoker网络管理
-    while true; do
-        clear
-        echo "Docker网络列表"
-        echo "------------------------------------------------------------"
-        docker network ls
-        echo ""
-        echo "------------------------------------------------------------"
-        display_network_info
-
-        echo ""
-        echo "网络操作"
-        echo "------------------------"
-        echo "1. 创建网络"
-        echo "2. 加入网络"
-        echo "3. 退出网络"
-        echo "4. 删除网络"
-        echo "5. 查看网络详细信息"
-        echo "------------------------"
-        echo "0. 返回上一级选单"
-        echo "------------------------"
-        read -p "请输入你的选择: " sub_choice
-
-        case $sub_choice in
-            1)
-                read -p "设置新网络名: " dockernetwork
-                docker network create $dockernetwork
-                echo "$dockernetwork 网络已设置成功。"
-                break_end
-                ;;
-            2)
-                read -p "加入网络名: " dockernetwork
-                read -p "容器名称或ID: " dockername
-                docker network connect $dockernetwork $dockername
-                echo "容器已加入到 $dockernetwork 网络。"
-                break_end
-                ;;
-            3)
-                read -p "退出网络名: " dockernetwork
-                read -p "容器名称或ID: " dockername
-                docker network disconnect $dockernetwork $dockername
-                echo "容器已从 $dockernetwork 网络退出。"
-                break_end
-                ;;
-            4)
-                read -p "请输入要删除的网络名: " dockernetwork
-                # 检查是否有容器正在使用该网络
-                local connected_containers=$(docker network inspect $dockernetwork --format '{{ range .Containers }}{{ .Name }} {{ end }}')
-                if [[ -n "$connected_containers" ]]; then
-                    echo "警告: 以下容器正在使用 $dockernetwork 网络: $connected_containers"
-                    if ask_confirmation "你确定要断开这些容器的网络连接并删除网络吗？"; then
-                        for container in $connected_containers; do
-                            docker network disconnect $dockernetwork $container
-                        done
-                        docker network rm $dockernetwork
-                        echo "$dockernetwork 网络及其连接已被删除。"
-                    else
-                        echo "网络删除操作已取消。"
-                    fi
-                else
-                    docker network rm $dockernetwork
-                    echo "$dockernetwork 网络已删除。"
-                fi
-                break_end
-                ;;
-            5)
-                read -p "请输入要查看的网络名: " dockernetwork
-                docker network inspect $dockernetwork
-                break_end
-                ;;
-            0)
-                break  # 跳出循环，退出菜单
-                ;;
-            *)
-                echo "无效选择，请重新输入。"
-                ;;
-        esac
-    done
-}
-
-# docker 卷管理
-volume_management() {
-    # Dcoker卷管理
-    while true; do
-        clear
-        echo "Docker卷列表"
-        docker volume ls
-        echo ""
-        echo "卷操作"
-        echo "------------------------"
-        echo "1. 创建新卷"
-        echo "2. 删除卷"
-        echo "3. 备份卷"
-        echo "4. 恢复卷"
-        echo "------------------------"
-        echo "0. 返回上一级选单"
-        echo "------------------------"
-        read -p "请输入你的选择: " sub_choice
-
-        case $sub_choice in
-            1)
-                read -p "设置新卷名: " dockerjuan
-                if docker volume create "$dockerjuan"; then
-                    echo "卷 '$dockerjuan' 创建成功。"
-                else
-                    echo "创建卷失败，请检查输入或权限。"
-                fi
-                ;;
-            2)
-                read -p "输入删除卷名: " dockerjuan
-                read -p "确定要删除卷 '$dockerjuan' 吗？(Y/N): " confirm
-                if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                    if docker volume rm "$dockerjuan"; then
-                        echo "卷 '$dockerjuan' 已删除。"
-                    else
-                        echo "删除卷失败，请检查卷名是否正确或是否正在使用。"
-                    fi
-                else
-                    echo "取消删除操作。"
-                fi
-                ;;
-            3)
-                read -p "输入要备份的卷名: " vol_name
-                read -p "输入备份文件路径（包括文件名）: " backup_path
-                docker run --rm -v $vol_name:/volume -v $backup_path:/backup busybox tar czvf /backup/$vol_name.tar.gz -C /volume .
-                echo "卷 $vol_name 已备份到 $backup_path/$vol_name.tar.gz"
-                ;;
-            4)
-                read -p "输入要恢复的卷名: " vol_name
-                read -p "输入备份文件路径: " backup_path
-                docker run --rm -v $vol_name:/volume -v $backup_path:/backup busybox tar xzvf /backup/$vol_name.tar.gz -C /volume
-                echo "卷 $vol_name 已从 $backup_path/$vol_name.tar.gz 恢复"
-                ;;
-            0)
-                break  # 跳出循环，退出菜单
-                ;;
-
-            *)
-                echo "无效选择，请重新输入。"
-                ;;
-        esac
-        break_end
-    done
-}
-
-# 函数：列出并审查即将删除的 Docker 对象
-review_prune_candidates() {
-    echo "即将删除以下停止的容器："
-    docker container ls -a --filter status=exited
-
-    echo "即将删除以下悬空的镜像："
-    docker images -f dangling=true
-
-    echo "即将删除以下未使用的网络："
-    echo "NETWORK ID    NAME                DRIVER              SCOPE"
-    docker network ls --filter type=custom --format "{{.ID}}" | while read network_id; do
-        # 忽略在网络详情查找过程中的错误信息
-        network_details=$(docker network inspect $network_id --format '{{.ID}} {{.Name}} {{.Driver}} {{.Scope}}' 2>/dev/null)
-        if [[ -n $network_details ]]; then
-            network_containers=$(docker network inspect $network_id --format '{{json .Containers}}')
-            if [[ $network_containers == "{}" ]]; then
-                echo "$network_details" | awk '{ printf "%-12s %-20s %-18s %-10s\n", substr($1,1,12), $2, $3, $4 }'
-            fi
-        fi
-    done
-
-    echo "即将删除以下未使用的数据卷："
-    echo "VOLUME NAME"
-    docker volume ls -f dangling=true --format "{{.Name}}"
-}
-
-# 清理无用的docker容器和镜像网络数据卷"
-clean_volume_network_container() {
-    # 清理无用的docker容器和镜像网络数据卷
-    clear
-    echo "请审查即将删除的 Docker 对象："
-    review_prune_candidates
-
-    if ask_confirmation "确定要继续清理吗？"; then
-        echo "正在清理，请稍候..."
-        docker system prune -af --volumes
-        echo "清理完成。"
-    else
-        echo "操作已取消。"
     fi
-}
 
-# 函数：重启Docker服务
-docker_restart() {
-    if [ -f "/etc/alpine-release" ]; then
-        service docker restart &>/dev/null
+    # 验证JSON格式
+    if jq empty "$temp_config" 2>/dev/null; then
+        mv "$temp_config" "$daemon_config"
+        show_success "Docker日志配置已更新"
+        return 0
     else
-        systemctl restart docker &>/dev/null
-    fi
-    if [ $? -eq 0 ]; then
-        echo "Docker服务已重启"
-    else
-        echo "Docker服务重启失败" >&2
+        handle_error "JSON验证失败，配置未更新"
+        rm -f "$temp_config"
+        return 1
     fi
 }
 
@@ -863,263 +139,915 @@ docker_ipv6_on() {
     # 写入IPv6配置到daemon.json
     cat > /etc/docker/daemon.json << EOF
 {
-  "ipv6": true,
-  "fixed-cidr-v6": "2001:db8:1::/64"
+    "ipv6": true,
+    "fixed-cidr-v6": "2001:db8:1::/64",
+    "experimental": true,
+    "ip6tables": true
 }
 EOF
 
     # 重启Docker服务以应用更改
-    docker_restart
+    if [ -f "/etc/alpine-release" ]; then
+        service docker restart || rc-service docker restart
+    else
+        systemctl restart docker
+    fi
 
-    echo "Docker已开启IPv6访问"
+    show_success "Docker已开启IPv6访问"
 }
 
 # 函数：禁用Docker的IPv6支持
 docker_ipv6_off() {
-    # 删除daemon.json文件
-    rm -f /etc/docker/daemon.json
+    # 备份现有配置
+    if [ -f "/etc/docker/daemon.json" ]; then
+        cp /etc/docker/daemon.json /etc/docker/daemon.json.bak
+        # 删除IPv6相关配置
+        jq 'del(.ipv6) | del(.["fixed-cidr-v6"]) | del(.experimental) | del(.ip6tables)' /etc/docker/daemon.json.bak > /etc/docker/daemon.json
+    fi
 
     # 重启Docker服务以应用更改
-    docker_restart
+    if [ -f "/etc/alpine-release" ]; then
+        service docker restart || rc-service docker restart
+    else
+        systemctl restart docker
+    fi
 
-    echo "Docker已关闭IPv6访问"
+    show_success "Docker已关闭IPv6访问"
 }
 
-# 功能：监控和警报
-monitor_and_alert() {
-    clear
-    echo "监控和警报"
-    echo "------------------------"
-    echo "1. 启动监控"
-    echo "2. 停止监控"
-    echo "------------------------"
-    echo "0. 返回上一级选单"
-    echo "------------------------"
-    read -p "请输入你的选择: " choice
+# 添加命令执行超时控制函数
+execute_with_timeout() {
+    local cmd="$1"
+    local timeout="${2:-300}"  # 默认5分钟超时
+    local message="${3:-执行命令}"
+    
+    # 显示进度条
+    (
+        i=0
+        while [ $i -lt $timeout ] && kill -0 $$ 2>/dev/null; do
+            printf "\r${message} [%-50s] %d%%" "$(printf '#%.0s' $(seq 1 $((i*50/timeout))))" $((i*100/timeout))
+            sleep 1
+            i=$((i+1))
+        done
+    ) &
+    progress_pid=$!
 
-    case $choice in
-        1)
-            read -p "请输入要监控的容器名: " container_name
-            read -p "请输入监控间隔（秒）: " interval
-            read -p "请输入警报命令: " alert_command
-            while true; do
-                if ! docker ps | grep -q $container_name; then
-                    eval $alert_command
-                    break
-                fi
-                sleep $interval
-            done &  # 后台运行
-            echo "监控已启动。"
-            ;;
-        2)
-            pkill -f "while true; do if ! docker ps | grep -q"
-            echo "监控已停止。"
-            ;;
-        0)
-            return
-            ;;
-        *)
-            echo "无效选择，请重新输入。"
-            ;;
-    esac
+    # 执行命令
+    eval "$cmd" &
+    cmd_pid=$!
+
+    # 等待命令执行完成或超时
+    local wait_result=0
+    if ! wait -n $cmd_pid 2>/dev/null; then
+        wait_result=$?
+        kill $progress_pid 2>/dev/null
+        handle_error "${message}失败 (超时)" $wait_result
+        return $wait_result
+    fi
+
+    kill $progress_pid 2>/dev/null
+    printf "\r${message} [%-50s] %d%%\n" "$(printf '#%.0s' $(seq 1 50))" 100
+    return 0
+}
+
+# 添加配置文件支持
+CONFIG_FILE="/etc/docker_manage.conf"
+
+load_config() {
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    else
+        # 创建默认配置
+        cat > "$CONFIG_FILE" << EOF
+# Docker管理脚本配置文件
+DOCKER_LOG_MAX_SIZE=20m
+DOCKER_LOG_MAX_FILE=3
+DOCKER_REGISTRY_MIRROR="https://mirror.ccs.tencentyun.com"
+DOCKER_DATA_ROOT="/var/lib/docker"
+DOCKER_IPV6_ENABLED=false
+EOF
+    fi
+}
+
+# 修改update_docker函数，添加进度显示
+update_docker() {
+    log "INFO" "开始更新Docker"
+    
+    # 检查是否为root用户
+    if [ "$(id -u)" != "0" ]; then
+        handle_error "此操作需要root权限"
+        return 1
+    fi
+
+    # 备份现有Docker配置
+    if [ -d "/etc/docker" ]; then
+        backup_dir="/root/docker_backup_$(date +%Y%m%d_%H%M%S)"
+        execute_with_timeout "mkdir -p '$backup_dir' && cp -r /etc/docker '$backup_dir'" 60 "备份Docker配置"
+        show_success "已备份Docker配置到 $backup_dir"
+        log "INFO" "Docker配置已备份到 $backup_dir"
+    fi
+
+    # 根据不同的Linux发行版安装Docker
+    if [ -f "/etc/alpine-release" ]; then
+        execute_with_timeout "apk update && apk add docker docker-compose" 300 "安装Docker"
+    else
+        execute_with_timeout "curl -fsSL https://get.docker.com | sh" 600 "安装Docker"
+    fi
+
+    # 设置镜像加速
+    if [ -n "$DOCKER_REGISTRY_MIRROR" ]; then
+        mkdir -p /etc/docker
+        cat > /etc/docker/daemon.json << EOF
+{
+    "registry-mirrors": ["$DOCKER_REGISTRY_MIRROR"],
+    "data-root": "$DOCKER_DATA_ROOT"
+}
+EOF
+    fi
+
+    log "INFO" "Docker更新完成"
+    show_success "Docker 安装/更新成功"
 }
 
 # 卸载Docker环境
 uninstall_docker() {
     clear
     echo "此操作将完全卸载Docker环境，包括所有容器、镜像和网络配置。"
-    read -p "确定卸载docker环境吗？(Y/N): " choice
+    
+    if ! ask_confirmation "确定要卸载Docker环境吗？" "n"; then
+        echo "卸载操作已取消"
+        return 0
+    fi
 
-    case "$choice" in
-        [Yy])
-            check_docker_installed
-            
-            echo "停止所有正在运行的容器..."
-            docker stop $(docker ps -q) 2>/dev/null || true
+    # 停止所有容器
+    echo "停止所有正在运行的容器..."
+    docker stop $(docker ps -q) 2>/dev/null || true
 
-            echo "删除所有容器..."
-            docker rm $(docker ps -a -q) 2>/dev/null || true
+    # 删除所有容器
+    echo "删除所有容器..."
+    docker rm -f $(docker ps -a -q) 2>/dev/null || true
 
-            echo "删除所有镜像..."
-            docker rmi $(docker images -q) 2>/dev/null || true
+    # 删除所有镜像
+    echo "删除所有镜像..."
+    docker rmi -f $(docker images -q) 2>/dev/null || true
 
-            echo "清除所有未使用的网络..."
-            docker network prune -f 2>/dev/null || true
+    # 清理所有卷和网络
+    echo "清理所有网络和数据卷..."
+    docker network prune -f 2>/dev/null || true
+    docker volume prune -f 2>/dev/null || true
 
-            # 根据安装的包管理器选择卸载命
-            if command -v apt &>/dev/null; then
-                sudo apt purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-compose
-                sudo apt autoremove -y
-            elif command -v yum &>/dev/null; then
-                sudo yum remove -y docker docker-client docker-client-latest docker-common \
-                docker-latest docker-latest-logrotate docker-logrotate docker-engine docker-compose
-            elif command -v dnf &>/dev/null; then
-                sudo dnf remove -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-compose
-            elif command -v apk &>/dev/null; then
-                sudo apk del docker docker-compose
-            else
-                echo "未识别的包管理器。"
-                exit 1
-            fi
+    # 根据不同的发行版执行卸载
+    if command -v apt-get &>/dev/null; then
+        apt-get purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+        apt-get autoremove -y
+    elif command -v yum &>/dev/null; then
+        yum remove -y docker docker-client docker-client-latest docker-common \
+            docker-latest docker-latest-logrotate docker-logrotate docker-engine
+    elif command -v apk &>/dev/null; then
+        apk del docker docker-compose
+    else
+        handle_error "未识别的包管理器"
+        return 1
+    fi
 
-            # 删除Docker数据目录
-            sudo rm -rf /var/lib/docker /var/lib/containerd
+    # 删除Docker相关目录和文件
+    echo "清理Docker相关文件和目录..."
+    rm -rf /var/lib/docker
+    rm -rf /var/lib/containerd
+    rm -rf /etc/docker
+    rm -rf ~/.docker
 
-            echo $PATH  # 查看当前PATH变量
-            export PATH=$(echo $PATH | sed -e 's|:/usr/local/bin/docker-compose||')  # 移除docker路径
-
-            echo "Docker已成功卸载。"
-            ;;
-        [Nn])
-            echo "卸载操作已取消。"
-            ;;
-        *)
-            echo "无效的选择，请输入 Y 或 N。"
-            ;;
-    esac
+    show_success "Docker已完全卸载"
+    return 0
 }
 
-# Docker管理器
-docker_manage() {
+# 增强的Docker状态显示函数
+state_docker() {
+    local output=""
+    
+    # 系统信息
+    output+="系统信息:\n"
+    output+="$(uname -a)\n"
+    output+="---------------------------------------------\n"
+
+    # Docker版本信息
+    output+="Docker 版本:\n"
+    output+="$(docker --version)\n"
+    if command -v docker-compose &>/dev/null; then
+        output+="$(docker-compose --version)\n"
+    fi
+    output+="---------------------------------------------\n"
+
+    # Docker系统信息
+    output+="Docker 系统信息:\n"
+    output+="$(docker info | grep -E 'Storage Driver|Logging Driver|Cgroup Driver|Docker Root Dir|Debug Mode')\n"
+    output+="---------------------------------------------\n"
+
+    # 资源使用情况
+    output+="资源使用情况:\n"
+    output+="$(docker system df)\n"
+    output+="---------------------------------------------\n"
+
+    # Docker镜像列表
+    output+="Docker 镜像列表:\n"
+    output+="$(docker image ls --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}')\n"
+    output+="---------------------------------------------\n"
+
+    # Docker容器列表
+    output+="Docker 容器列表:\n"
+    output+="$(docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}')\n"
+    output+="---------------------------------------------\n"
+
+    # Docker卷列表
+    output+="Docker 卷列表:\n"
+    output+="$(docker volume ls)\n"
+    output+="---------------------------------------------\n"
+
+    # Docker网络列表
+    output+="Docker 网络列表:\n"
+    output+="$(docker network ls)\n"
+    output+="---------------------------------------------\n"
+
+    # 使用less显示输出，支持滚动
+    echo -e "$output" | less -R
+}
+
+# 增强的容器管理函数
+docker_container_manage() {
     while true; do
         clear
-        print_color "$COLOR_GREEN_DARK" "▶ Docker管理器 v${VERSION}"
-        print_color "$COLOR_YELLOW" "------------------------"
-        echo "1. 安装更新Docker环境"
-        echo "------------------------"				
-        echo "2. 查看Dcoker全局状态"
+        echo -e "${lianglan}Docker容器管理${bai}"
+        echo "当前运行的容器:"
+        docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        echo -e "\n已停止的容器:"
+        docker ps -f "status=exited" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        
+        echo -e "\n${huang}容器操作菜单${bai}"
         echo "------------------------"
-        echo "3. Dcoker容器管理 ▶"
-        echo "4. Dcoker镜像管理 ▶"
-        echo "5. Dcoker网络管理 ▶"
-        echo "6. Dcoker卷管理 ▶"
-        echo "------------------------"				
-        echo "7. 清理无用的docker容器和镜像网络数据卷"
-        echo "------------------------"	
-        echo "8. 更换Dcoker源"	
-        echo "------------------------"	        
-        echo "30. 开启Docker-ipv6访问"	
-        echo "31. 关闭Docker-ipv6访问"	
-        echo "------------------------"	
-        echo "40. Docker Compose 项目管理"	
-        echo "------------------------"	
-        echo "50. 监控和警报"	
-        echo "------------------------"	
-        echo "60. 卸载Dcoker环境"	
-        print_color "$COLOR_YELLOW" "------------------------"	
-        echo "0. 返回主菜单"
-        print_color "$COLOR_YELLOW" "------------------------"
-        read -p "请输入你的选择: " sub_choice
+        echo "1. 创建新容器"
+        echo "2. 启动容器"
+        echo "3. 停止容器"
+        echo "4. 重启容器"
+        echo "5. 删除容器"
+        echo "6. 查看容器日志"
+        echo "7. 进入容器终端"
+        echo "8. 查看容器详细信息"
+        echo "9. 导出容器"
+        echo "10. 批量操作"
+        echo "0. 返回上级菜单"
+        echo "------------------------"
 
-        case $sub_choice in
+        read -p "请选择操作 [0-10]: " choice
+
+        case $choice in
             1)
-                clear
-                update_docker
+                read -p "请输入完整的docker run命令: " cmd
+                eval "$cmd" || handle_error "创建容器失败"
+                ;;
+            2|3|4|5|6|7|8|9)
+                read -p "请输入容器名称或ID: " container
+                if ! docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
+                    handle_error "容器不存在"
+                    continue
+                fi
+                
+                case $choice in
+                    2) docker start "$container" ;;
+                    3) docker stop "$container" ;;
+                    4) docker restart "$container" ;;
+                    5)
+                        if ask_confirmation "确定要删除容器 $container 吗?"; then
+                            docker rm -f "$container"
+                        fi
+                        ;;
+                    6)
+                        echo "按 Ctrl+C 退出日志查看"
+                        docker logs -f "$container"
+                        ;;
+                    7)
+                        echo "输入 'exit' 退出容器"
+                        docker exec -it "$container" /bin/bash || docker exec -it "$container" /bin/sh
+                        ;;
+                    8)
+                        docker inspect "$container" | less
+                        ;;
+                    9)
+                        output_file="${container}_$(date +%Y%m%d_%H%M%S).tar"
+                        docker export "$container" > "$output_file"
+                        show_success "容器已导出到 $output_file"
+                        ;;
+                esac
+                ;;
+            10)
+                echo "批量操作菜单:"
+                echo "1. 启动所有容器"
+                echo "2. 停止所有容器"
+                echo "3. 删除所有停止的容器"
+                echo "4. 删除所有容器"
+                read -p "请选择批量操作 [1-4]: " batch_choice
+                
+                case $batch_choice in
+                    1) 
+                        container_count=$(docker ps -aq | wc -l)
+                        if [ "$container_count" -gt 0 ] && ask_confirmation "确定要启动所有 $container_count 个容器吗?"; then
+                            execute_with_timeout "docker start \$(docker ps -aq)" 300 "启动所有容器"
+                        fi
+                        ;;
+                    2) docker stop $(docker ps -q) ;;
+                    3) docker container prune -f ;;
+                    4)
+                        if ask_confirmation "确定要删除所有容器吗？"; then
+                            docker rm -f $(docker ps -aq)
+                        fi
+                        ;;
+                    *) handle_error "无效的选择" ;;
+                esac
+                ;;
+            0) break ;;
+            *) handle_error "无效的选择" ;;
+        esac
+        break_end
+    done
+}
+
+# 增强的镜像管理函数
+image_management() {
+    while true; do
+        clear
+        echo -e "${lianglan}Docker镜像管理${bai}"
+        docker image ls
+        
+        echo -e "\n${huang}镜像操作菜单${bai}"
+        echo "------------------------"
+        echo "1. 拉取镜像"
+        echo "2. 删除镜像"
+        echo "3. 导出镜像"
+        echo "4. 导入镜像"
+        echo "5. 构建镜像"
+        echo "6. 清理未使用的镜像"
+        echo "7. 查看镜像历史"
+        echo "8. 为镜像添加标签"
+        echo "0. 返回上级菜单"
+        echo "------------------------"
+
+        read -p "请选择操作 [0-8]: " choice
+
+        case $choice in
+            1)
+                read -p "请输入镜像名称 [格式: 名称:标签]: " image
+                docker pull "$image" || handle_error "拉取镜像失败"
                 ;;
             2)
-                clear
-                if check_docker_installed; then
-                    state_docker
+                read -p "请输入要删除的镜像ID或名称: " image
+                if ask_confirmation "确定要删除镜像 $image 吗?"; then
+                    docker rmi -f "$image" || handle_error "删除镜像失败"
                 fi
                 ;;
             3)
-                clear
-                if check_docker_installed; then
-                    docker_container_manage
-                fi
+                read -p "请输入要导出的镜像名称: " image
+                output_file="${image//\//_}_$(date +%Y%m%d_%H%M%S).tar"
+                docker save "$image" > "$output_file" && \
+                show_success "镜像已导出到 $output_file"
                 ;;
             4)
-                clear
-                if check_docker_installed; then
-                    image_management
+                read -p "请输入要导入的镜像文件路径: " image_file
+                if [ -f "$image_file" ]; then
+                    docker load < "$image_file"
+                else
+                    handle_error "文件不存在"
                 fi
                 ;;
             5)
-                clear
-                if check_docker_installed; then
-                    network_management
+                read -p "请输入Dockerfile所在目录: " dockerfile_path
+                read -p "请输入镜像名称和标签: " image_name
+                if [ -d "$dockerfile_path" ]; then
+                    docker build -t "$image_name" "$dockerfile_path"
+                else
+                    handle_error "目录不存在"
                 fi
                 ;;
             6)
-                clear
-                if check_docker_installed; then
-                    volume_management
+                if ask_confirmation "确定要清理未使用的镜像吗?"; then
+                    docker image prune -af
                 fi
                 ;;
             7)
-                clear
-                if check_docker_installed; then
-                    clean_volume_network_container
-                fi
+                read -p "请输入镜像名称: " image
+                docker history "$image" | less
                 ;;
             8)
-                clear
-                set_docker_source
+                read -p "请输入源镜像名称: " source_image                
+				read -p "请输入新标签: " new_tag
+                docker tag "$source_image" "$new_tag" || handle_error "添加标签失败"
                 ;;
-            30)
-                clear   
-                if check_docker_installed; then
-                    docker_ipv6_on
-                fi             
-                ;;
-            31)
-                clear
-                if check_docker_installed; then
-                    docker_ipv6_off
-                fi               
-                ;;
-            40)
-                clear
-                if check_docker_compose_installed; then
-                    manage_docker_compose
-                fi               
-                ;;
-            50)
-                clear
-                monitor_and_alert
-                ;;
-            60)
-                clear
-                uninstall_docker
-                ;;
-            0)
-                break
-                ;;
-            *)
-                print_color "$COLOR_RED_DARK" "无效的选择，请重新输入。"
-                ;;
+            0) break ;;
+            *) handle_error "无效的选择" ;;
         esac
         break_end
-    done 
+    done
+}
+
+# 增强的网络管理函数
+network_management() {
+    while true; do
+        clear
+        echo -e "${lianglan}Docker网络管理${bai}"
+        docker network ls
+        
+        # 显示网络详细信息
+        echo -e "\n当前网络使用情况:"
+        printf "%-25s %-25s %-15s\n" "网络名称" "容器名称" "IP地址"
+        echo "------------------------------------------------------------"
+        for network in $(docker network ls --format "{{.Name}}"); do
+            # 获取该网络下的所有容器信息
+            containers=$(docker network inspect "$network" --format '{{range .Containers}}{{.Name}} {{.IPv4Address}} {{end}}')
+            if [ -n "$containers" ]; then
+                echo -e "\n${lianglan}$network${bai}"
+                while read -r name ip; do
+                    if [ -n "$name" ] && [ -n "$ip" ]; then
+                        printf "%-20s %-20s %-15s\n" "" "$name" "$ip"
+                    fi
+                done <<< "$(echo "$containers" | tr ' ' '\n' | sed 'N;s/\n/ /')"
+            fi
+        done
+        
+        echo -e "\n${huang}网络操作菜单${bai}"
+        echo "------------------------"
+        echo "1. 创建新网络"
+        echo "2. 删除网络"
+        echo "3. 连接容器到网络"
+        echo "4. 断开容器与网络的连接"
+        echo "5. 查看网络详细信息"
+        echo "6. 清理未使用的网络"
+        echo "7. 创建带子网的网络"
+        echo "0. 返回上级菜单"
+        echo "------------------------"
+
+        read -p "请选择操作 [0-7]: " choice
+
+        case $choice in
+            1)
+                read -p "请输入网络名称: " network_name
+                read -p "请选择驱动(bridge/overlay/host/macvlan): " driver
+                driver=${driver:-bridge}
+                docker network create --driver "$driver" "$network_name" || handle_error "创建网络失败"
+                ;;
+            2)
+                read -p "请输入要删除的网络名称: " network_name
+                if ask_confirmation "确定要删除网络 $network_name 吗?"; then
+                    docker network rm "$network_name" || handle_error "删除网络失败"
+                fi
+                ;;
+            3)
+                read -p "请输入容器名称: " container
+                read -p "请输入网络名称: " network
+                docker network connect "$network" "$container" || handle_error "连接网络失败"
+                ;;
+            4)
+                read -p "请输入容器名称: " container
+                read -p "请输入网络名称: " network
+                docker network disconnect "$network" "$container" || handle_error "断开网络失败"
+                ;;
+            5)
+                read -p "请输入网络名称: " network
+                docker network inspect "$network" | less
+                ;;
+            6)
+                if ask_confirmation "确定要清理未使用的网络吗?"; then
+                    docker network prune -f
+                fi
+                ;;
+            7)
+                read -p "请输入网络名称: " network_name
+                read -p "请输入子网CIDR(例如: 172.20.0.0/16): " subnet
+                read -p "请输入网关IP(例如: 172.20.0.1): " gateway
+                docker network create --subnet "$subnet" --gateway "$gateway" "$network_name" || \
+                    handle_error "创建网络失败"
+                ;;
+            0) break ;;
+            *) handle_error "无效的选择" ;;
+        esac
+        break_end
+    done
+}
+
+# 增强的数据卷管理函数
+volume_management() {
+    while true; do
+        clear
+        echo -e "${lianglan}Docker数据卷管理${bai}"
+        docker volume ls
+        
+        echo -e "\n${huang}数据卷操作菜单${bai}"
+        echo "------------------------"
+        echo "1. 创建数据卷"
+        echo "2. 删除数据卷"
+        echo "3. 查看数据卷详情"
+        echo "4. 清理未使用的数据卷"
+        echo "5. 备份数据卷"
+        echo "6. 恢复数据卷"
+        echo "0. 返回上级菜单"
+        echo "------------------------"
+
+        read -p "请选择操作 [0-6]: " choice
+
+        case $choice in
+            1)
+                read -p "请输入数据卷名称: " volume_name
+                docker volume create "$volume_name" || handle_error "创建数据卷失败"
+                ;;
+            2)
+                read -p "请输入要删除的数据卷名称: " volume_name
+                if ask_confirmation "确定要删除数据卷 $volume_name 吗?"; then
+                    docker volume rm "$volume_name" || handle_error "删除数据卷失败"
+                fi
+                ;;
+            3)
+                read -p "请输入数据卷名称: " volume_name
+                docker volume inspect "$volume_name" | less
+                ;;
+            4)
+                if ask_confirmation "确定要清理未使用的数据卷吗?"; then
+                    docker volume prune -f
+                fi
+                ;;
+            5)
+                read -p "请输入要备份的数据卷名称: " volume_name
+                backup_file="${volume_name}_backup_$(date +%Y%m%d_%H%M%S).tar"
+                docker run --rm -v "$volume_name":/source:ro -v "$(pwd)":/backup alpine tar cf "/backup/$backup_file" -C /source .
+                show_success "数据卷已备份到 $backup_file"
+                ;;
+            6)
+                read -p "请输入要恢复的备份文件路径: " backup_file
+                read -p "请输入目标数据卷名称: " volume_name
+                if [ -f "$backup_file" ]; then
+                    docker volume create "$volume_name" 2>/dev/null
+                    docker run --rm -v "$volume_name":/target -v "$(pwd)":/backup alpine tar xf "/backup/$(basename "$backup_file")" -C /target
+                    show_success "数据卷已恢复"
+                else
+                    handle_error "备份文件不存在"
+                fi
+                ;;
+            0) break ;;
+            *) handle_error "无效的选择" ;;
+        esac
+        break_end
+    done
+}
+
+# 系统清理函数
+clean_docker_system() {
+    clear
+    echo "Docker系统清理"
+    echo "------------------------"
+    echo "1. 显示当前磁盘使用情况"
+    echo "2. 清理未使用的容器"
+    echo "3. 清理未使用的镜像"
+    echo "4. 清理未使用的数据卷"
+    echo "5. 清理未使用的网络"
+    echo "6. 清理构建缓存"
+    echo "7. 全面清理（慎用）"
+    echo "0. 返回上级菜单"
+    echo "------------------------"
+
+    read -p "请选择要执行的清理操作 [0-7]: " choice
+
+    case $choice in
+        1)
+            echo "系统使用情况:"
+            docker system df -v | less
+            ;;
+        2)
+            if ask_confirmation "确定要清理未使用的容器吗?"; then
+                docker container prune -f
+            fi
+            ;;
+        3)
+            if ask_confirmation "确定要清理未使用的镜像吗?"; then
+                docker image prune -af
+            fi
+            ;;
+        4)
+            if ask_confirmation "确定要清理未使用的数据卷吗?"; then
+                docker volume prune -f
+            fi
+            ;;
+        5)
+            if ask_confirmation "确定要清理未使用的网络吗?"; then
+                docker network prune -f
+            fi
+            ;;
+        6)
+            if ask_confirmation "确定要清理构建缓存吗?"; then
+                docker builder prune -af
+            fi
+            ;;
+        7)
+            if ask_confirmation "这将清理所有未使用的Docker资源，确定要继续吗?" "n"; then
+                docker system prune -af --volumes
+            fi
+            ;;
+        0) return ;;
+        *) handle_error "无效的选择" ;;
+    esac
+    break_end
+}
+
+# 添加性能监控增强功能
+monitor_docker_performance() {
+    local interval="${1:-5}"  # 默认5秒刷新一次
+    
+    while true; do
+        clear
+        echo -e "${lianglan}Docker性能监控 (每${interval}秒刷新)${bai}"
+        echo "按 Ctrl+C 退出监控"
+        echo "----------------------------------------"
+        
+        # 显示系统资源使用情况
+        echo "系统资源使用情况:"
+        free -h | head -n 2
+        echo "CPU使用率: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}')%"
+        
+        # 显示Docker容器资源使用情况
+        echo -e "\nDocker容器资源使用情况:"
+        docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"
+        
+        sleep $interval
+    done
+}
+
+# 添加重试机制函数
+retry_command() {
+    local cmd="$1"
+    local max_attempts="${2:-3}"
+    local delay="${3:-5}"
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if eval "$cmd"; then
+            return 0
+        else
+            log "WARN" "命令执行失败，尝试 $attempt/$max_attempts"
+            echo -e "${huang}命令执行失败，${delay}秒后重试 ($attempt/$max_attempts)${bai}"
+            sleep $delay
+            attempt=$((attempt + 1))
+        fi
+    done
+    
+    handle_error "命令执行失败，已达到最大重试次数"
+    return 1
+}
+
+# 添加健康检查函数
+check_docker_health() {
+    local issues=()
+    
+    # 检查Docker守护进程状态
+    if ! systemctl is-active --quiet docker 2>/dev/null; then
+        issues+=("Docker守护进程未运行")
+    fi
+    
+    # 检查磁盘空间
+    local docker_root=$(docker info --format '{{.DockerRootDir}}')
+    local available_space=$(df -h "$docker_root" | awk 'NR==2 {print $4}')
+    if [[ $(df -k "$docker_root" | awk 'NR==2 {print $4}') -lt 1048576 ]]; then  # 1GB
+        issues+=("Docker根目录空间不足 (可用: $available_space)")
+    fi
+    
+    # 检查系统资源
+    local memory_usage=$(free | awk '/Mem:/ {print int($3/$2 * 100)}')
+    if [ "$memory_usage" -gt 90 ]; then
+        issues+=("系统内存使用率过高: ${memory_usage}%")
+    fi
+    
+    # 检查Docker配置
+    if ! docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+        issues+=("Docker配置可能存在问题")
+    fi
+    
+    # 返回检查结果
+    if [ ${#issues[@]} -eq 0 ]; then
+        show_success "Docker运行状况良好"
+        return 0
+    else
+        echo -e "${hong}发现以下问题:${bai}"
+        printf '%s\n' "${issues[@]}"
+        return 1
+    fi
+}
+
+# 增强的备份功能
+backup_docker() {
+    local backup_dir="/root/docker_backups/$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$backup_dir"
+    
+    # 备份Docker配置
+    if [ -d "/etc/docker" ]; then
+        cp -r /etc/docker "$backup_dir/docker_config"
+    fi
+    
+    # 备份容器定义
+    docker inspect $(docker ps -aq) > "$backup_dir/containers.json" 2>/dev/null
+    
+    # 备份重要数据卷
+    echo "正在备份数据卷..."
+    for volume in $(docker volume ls -q); do
+        echo "备份数据卷: $volume"
+        docker run --rm -v "$volume":/source:ro -v "$backup_dir/volumes":/backup alpine \
+            tar czf "/backup/${volume}.tar.gz" -C /source .
+    done
+    
+    # 创建备份清单
+    {
+        echo "备份时间: $(date)"
+        echo "Docker版本: $(docker --version)"
+        echo "容器列表:"
+        docker ps -a --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+        echo "数据卷列表:"
+        docker volume ls
+    } > "$backup_dir/backup_manifest.txt"
+    
+    # 压缩备份
+    tar czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    show_success "备份完成: ${backup_dir}.tar.gz"
+    log "INFO" "Docker备份完成: ${backup_dir}.tar.gz"
+}
+
+# 增强的性能监控函数
+monitor_docker_performance() {
+    local interval="${1:-5}"
+    local stats_file="/tmp/docker_stats.log"
+    
+    trap 'rm -f $stats_file; exit 0' INT TERM
+    
+    while true; do
+        clear
+        echo -e "${lianglan}Docker性能监控 (每${interval}秒刷新)${bai}"
+        echo "按 Ctrl+C 退出监控"
+        echo "----------------------------------------"
+        
+        # 系统资源使用情况
+        echo "系统资源使用情况:"
+        echo "CPU使用率: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}')%"
+        free -h | head -n 2
+        echo "磁盘使用情况:"
+        df -h $(docker info --format '{{.DockerRootDir}}') | tail -n 1
+        
+        # Docker资源使用情况
+        echo -e "\nDocker资源使用情况:"
+        docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}" | tee "$stats_file"
+        
+        # 显示高资源占用的容器
+        echo -e "\n资源使用率较高的容器:"
+        grep -v "NAME" "$stats_file" | sort -k2 -r | head -n 3
+        
+        # 显示网络IO较高的容器
+        echo -e "\n网络IO较高的容器:"
+        grep -v "NAME" "$stats_file" | sort -k4 -r | head -n 3
+        
+        sleep "$interval"
+    done
+}
+
+# 添加安全检查函数
+check_docker_security() {
+    local issues=()
+    
+    # 检查Docker配置安全性
+    if docker info 2>/dev/null | grep -q "Insecure Registries"; then
+        issues+=("发现不安全的镜像仓库配置")
+    fi
+    
+    # 检查容器安全配置
+    for container in $(docker ps -q); do
+        # 检查特权容器
+        if docker inspect "$container" --format '{{.HostConfig.Privileged}}' | grep -q "true"; then
+            issues+=("容器 $(docker inspect "$container" --format '{{.Name}}') 运行在特权模式")
+        fi
+        
+        # 检查端口暴露
+        if docker port "$container" &>/dev/null; then
+            issues+=("容器 $(docker inspect "$container" --format '{{.Name}}') 暴露了端口")
+        fi
+    done
+    
+    # 检查Docker守护进程配置
+    if [ -f "/etc/docker/daemon.json" ]; then
+        if ! jq empty "/etc/docker/daemon.json" 2>/dev/null; then
+            issues+=("Docker守护进程配置文件格式无效")
+        fi
+    fi
+    
+    # 返回检查结果
+    if [ ${#issues[@]} -eq 0 ]; then
+        show_success "未发现安全问题"
+        return 0
+    else
+        echo -e "${hong}发现以下安全问题:${bai}"
+        printf '%s\n' "${issues[@]}"
+        return 1
+    fi
+}
+
+# Docker主菜单函数
+docker_manage() {
+    while true; do
+        clear
+        echo -e "${lianglan}Docker管理系统${bai}"
+        echo "------------------------"
+        echo "1. 安装/更新Docker"
+        echo "2. 查看Docker状态"
+        echo "3. 容器管理"
+        echo "4. 镜像管理"
+        echo "5. 网络管理"
+        echo "6. 数据卷管理"
+        echo "7. 系统清理"
+        echo "8. 更换Docker源"
+        echo "9. 修改日志配置"
+        echo "10. IPv6管理"
+        echo "11. 性能监控"
+        echo "12. 健康检查"
+        echo "13. 备份Docker环境"
+        echo "14. 安全检查"
+        echo "50. 卸载Docker"
+        echo "0. 退出"
+        echo "------------------------"
+
+        read -p "请选择操作 [0-50]: " choice
+
+        case $choice in
+            1) update_docker ;;
+            2) state_docker ;;
+            3) docker_container_manage ;;
+            4) image_management ;;
+            5) network_management ;;
+            6) volume_management ;;
+            7) clean_docker_system ;;
+            8) bash <(curl -sSL https://linuxmirrors.cn/docker.sh) ;;
+            9)
+                read -p "请输入最大日志大小(默认:20m): " max_size
+                read -p "请输入保留的日志文件数(默认:3): " max_file
+                setup_docker_logging "${max_size:-20m}" "${max_file:-3}"
+                ;;
+            10)
+                echo "IPv6管理"
+                echo "1. 开启IPv6"
+                echo "2. 关闭IPv6"
+                read -p "请选择: " ipv6_choice
+                case $ipv6_choice in
+                    1) docker_ipv6_on || handle_error "开启IPv6失败" ;;
+                    2) docker_ipv6_off || handle_error "关闭IPv6失败" ;;
+                    *) handle_error "无效的选择" ;;
+                esac
+                ;;
+            11)
+                echo "Docker性能监控"
+                docker stats --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"
+                ;;
+            12) check_docker_health ;;
+            13) backup_docker ;;
+            14) check_docker_security ;;
+            50)
+                if ask_confirmation "确定要卸载Docker吗?" "n"; then
+                    uninstall_docker
+                fi
+                ;;
+            0) 
+                echo "感谢使用Docker管理系统"
+                exit 0
+                ;;
+            *) handle_error "无效的选择" ;;
+        esac
+        [ "$choice" != "11" ] && break_end
+    done
 }
 
 # 主程序入口
 main() {
-    if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-        if [[ "$#" -eq 0 ]]; then
-            docker_manage
-        else
-            case "$1" in
-                update) 
-                    update_docker
-                    ;;
-                state) 
-                    if check_docker_installed; then
-                        state_docker
-                    else
-                        echo "Docker is not installed."
-                    fi
-                    ;;
-                uninstall) 
-                    uninstall_docker
-                    ;;
-                manage)
-                    docker_manage
-                    ;;
-                *) error_exit "Usage: $0 {update|state|uninstall|manage}" ;;
-            esac
-        fi
+    # 检查是否为root用户
+    if [ "$(id -u)" != "0" ]; then
+        handle_error "此脚本需要root权限运行"
+        exit 1
     fi
+
+    # 处理命令行参数
+    case "$1" in
+        update) update_docker ;;
+        state) state_docker ;;
+        uninstall) uninstall_docker ;;
+        manage) docker_manage ;;
+        *)
+            if [ -n "$1" ]; then
+                echo "用法: $0 {update|state|uninstall|manage}"
+                exit 1
+            else
+                docker_manage
+            fi
+            ;;
+    esac
 }
 
+# 启动程序
 main "$@"
