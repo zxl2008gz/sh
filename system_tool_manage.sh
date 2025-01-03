@@ -234,19 +234,36 @@ set_shortcut_keys() {
     echo "设置脚本启动快捷键"
     echo "------------------------"
 
+    # 检查 solin.sh 是否存在
+    if [ ! -f ~/solin.sh ]; then
+        echo "错误: ~/solin.sh 文件不存在"
+        return 1
+    fi
+
     # 检查 .bashrc 文件是否存在
     if [ ! -f ~/.bashrc ]; then
         touch ~/.bashrc
     fi
 
-    # 删除所有已存在的相关别名
-    sed -i '/alias.*system_tool_manage.sh/d' ~/.bashrc
-    sed -i '/alias.*solin.sh/d' ~/.bashrc
+    # 检查是否已经设置了别名
+    if grep -q "alias.*='~/solin.sh'" ~/.bashrc; then
+        # 获取当前的别名
+        current_alias=$(grep "alias.*='~/solin.sh'" ~/.bashrc | awk -F"=" '{print $1}' | awk '{print $2}')
+        echo "当前快捷键为: $current_alias"
+    else
+        current_alias=""
+        echo "当前未设置快捷键"
+    fi
 
     # 获取用户输入的新别名
     read -p "请输入新的快捷键名称: " new_alias
 
     if [ -n "$new_alias" ]; then
+        # 如果存在旧的别名，则删除
+        if [ -n "$current_alias" ]; then
+            sed -i "/alias $current_alias='~/solin.sh'/d" ~/.bashrc
+        fi
+
         # 添加新的别名
         echo "alias $new_alias='bash ~/solin.sh'" >> ~/.bashrc
         
