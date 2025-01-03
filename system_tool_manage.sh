@@ -2295,10 +2295,10 @@ system_tool() {
 # 主逻辑
 
 case $choice in
-	1)
+	work)
 		work_area
 		;;
-	2)
+	tool)
 		system_tool
 		;;
 	*)
