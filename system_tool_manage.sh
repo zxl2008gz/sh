@@ -246,12 +246,14 @@ set_shortcut_keys() {
     fi
 
     # 检查是否已经设置了别名
-    if grep -q "alias.*='~/solin.sh'" ~/.bashrc; then
-        # 获取当前的别名
-        current_alias=$(grep "alias.*='~/solin.sh'" ~/.bashrc | awk -F"=" '{print $1}' | awk '{print $2}')
-        echo "当前快捷键为: $current_alias"
+    if grep -q "alias.*='.*solin.sh'" ~/.bashrc; then
+        # 获取所有现有的别名
+        echo "当前已设置的快捷键:"
+        grep "alias.*='.*solin.sh'" ~/.bashrc | while read -r line; do
+            current_alias=$(echo "$line" | awk -F"=" '{print $1}' | awk '{print $2}')
+            echo "$current_alias"
+        done
     else
-        current_alias=""
         echo "当前未设置快捷键"
     fi
 
@@ -259,10 +261,8 @@ set_shortcut_keys() {
     read -p "请输入新的快捷键名称: " new_alias
 
     if [ -n "$new_alias" ]; then
-        # 如果存在旧的别名，则删除
-        if [ -n "$current_alias" ]; then
-            sed -i "/alias $current_alias='~/solin.sh'/d" ~/.bashrc
-        fi
+        # 删除所有指向 solin.sh 的别名
+        sed -i "/alias.*='.*solin.sh'/d" ~/.bashrc
 
         # 添加新的别名
         echo "alias $new_alias='bash ~/solin.sh'" >> ~/.bashrc
