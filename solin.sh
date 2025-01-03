@@ -141,41 +141,33 @@ get_containers_by_type() {
 }
 
 check_port() {
-    # 定义要检测的端口
-    PORT='$1'
+    local port="$1"
+    local result=""
 
+    # 按优先级尝试不同的命令
     if command -v ss &>/dev/null; then
-        # 使用 ss 命令检查
-        local result=$(ss -tuln | grep -q ":$port ")
+        result=$(ss -tuln | grep -q ":$port ")
     elif command -v netstat &>/dev/null; then
-        # 使用 netstat 命令检查
-         local result=$(netstat -tuln | grep -q ":$port ")
+        result=$(netstat -tuln | grep -q ":$port ")
     elif command -v lsof &>/dev/null; then
-        # 使用 lsof 命令检查
-         local result=$(lsof -i :"$port" &>/dev/null)
+        result=$(lsof -i :"$port" &>/dev/null)
     else
-        echo "没有找到 ss, netstat 或 lsof 命令。无法检测端口。"
-        exit 1
+        echo "没有找到可用的端口检测工具(ss/netstat/lsof)"
+        return 2
     fi
 
-    # 判断结果并输出相应信息
     if [ -n "$result" ]; then
-        is_nginx_container=$(docker ps --format '{{.Names}}' | grep 'nginx')
-
-        # 判断是否是Nginx容器占用端口
-        if [ -n "$is_nginx_container" ]; then
-            echo ""
+        # 检查是否是nginx容器占用
+        if docker ps --format '{{.Names}}' | grep -q 'nginx'; then
+            return 0
         else
-            clear
-            echo -e "${hong}端口 ${huang}$PORT${hong} 已被占用，无法安装环境，卸载以下程序后重试！${bai}"
+            echo -e "${hong}端口 ${huang}$port${hong} 已被占用，无法安装环境，卸载以下程序后重试！${bai}"
             echo "$result"
-            break_end
-            break
-
+            return 1
         fi
-    else
-        echo ""
     fi
+
+    return 0
 }
 
 # 安装依赖
@@ -868,48 +860,44 @@ ldnmp_install_status_one() {
 
 # ldnmp安装状态
 ldnmp_install_status() {
-
-    if docker inspect "php" &>/dev/null; then
-        echo "LDNMP环境已安装，开始部署 $webname"
-    else
+    if ! docker inspect "php" &>/dev/null; then
         echo -e "${huang}LDNMP环境未安装，请先安装LDNMP环境，再部署网站${bai}"
         break_end
-        break
+        return 1
     fi
-
+    
+    echo "LDNMP环境已安装，开始部署 $webname"
+    return 0
 }
 
 #nginx状态
 nginx_install_status() {
-    if docker inspect "nginx" &>/dev/null; then
-        echo "nginx环境已安装，开始部署 $webname"
-    else
+    if ! docker inspect "nginx" &>/dev/null; then
         echo -e "${huang}nginx未安装，请先安装nginx环境，再部署网站${bai}"
         break_end
-        break
+        return 1
     fi
+
+    echo "nginx环境已安装，开始部署 $webname"
+    return 0
 }
 
 #检测域名正确性
 repeat_add_yuming() {
-
-    domain_regex="^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$"
-    if [[ $yuming =~ $domain_regex ]]; then
-        echo "域名格式正确"
-    else
+    local domain_regex="^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$"
+    
+    if [[ ! $yuming =~ $domain_regex ]]; then
         echo "域名格式不正确，请重新输入"
-        break_end
-        break
+        return 1
     fi
 
-    if [ -e /home/docker/web/conf.d/$yuming.conf ]; then
+    if [ -e "/home/docker/web/conf.d/$yuming.conf" ]; then
         echo -e "${huang}当前 ${yuming} 域名已被使用，请前往31站点管理，删除站点，再部署 ${webname} ！${bai}"
-        break_end
-        break
-    else
-        echo "当前 ${yuming} 域名可用"
+        return 1
     fi
 
+    echo "当前 ${yuming} 域名可用"
+    return 0
 }
 
 #添加域名
@@ -1838,35 +1826,24 @@ docker_output() {
     clear
     echo "$docker_name 已经安装完成"
     echo "------------------------"  
-    # 检查 $yuming 是否存在
+    
+    # 获取外部 IP 地址
+    read ipv4_address ipv6_address < <(get_ip_address)
+    
+    # 根据是否有域名显示不同的访问地址
     if [ -z "$yuming" ]; then
-        # 如果 $yuming 不存在
-        # 获取外部 IP 地址
-        read ipv4_address ipv6_address < <(get_ip_address)
         echo "您可以使用以下地址访问:"
         echo "http:$ipv4_address:$docker_port"
-        $docker_use
-        $docker_passwd
     else
-        # 如果 $yuming 存在，使用 $yuming 作为 external URL
         reverse_proxy
-        # 获取外部 IP 地址
-        read ipv4_address ipv6_address < <(get_ip_address)
         echo "您可以使用以下地址访问:"
         echo "https://$yuming"
         echo "http:$ipv4_address:$docker_port"
-        $docker_use
-        $docker_passwd
     fi
 
-    # reverse_proxy
-    # # 获取外部 IP 地址
-    # read ipv4_address ipv6_address < <(get_ip_address)
-    # echo "您可以使用以下地址访问:"
-    # echo "https://$yuming"
-    # echo "http:$ipv4_address:$docker_port"
-    # $docker_use
-    # $docker_passwd
+    # 显示用户名密码等信息
+    $docker_use
+    $docker_passwd
 }
 
 # 安装应用
@@ -2853,7 +2830,7 @@ docker_script_path() {
 #docker管理
 docker_manage() {
     docker_script_path
-    ./docker_manage_info.sh
+    ./docker_manage_info.sh manage
 }
 
 #mysql脚本路径
@@ -2878,24 +2855,29 @@ install_db_mysql() {
 
 # 添加数据库
 add_db() {
-
     local project_name="$1"
-
+    # 规范化数据库名称,移除非法字符
     dbname=$(echo "$project_name" | sed 's/[^A-Za-z0-9_]/_/g')
 
     db_script_path
-    ./mysql_db_manager.sh create "mysql" "$dbname"
-
+    if ! ./mysql_db_manager.sh create "mysql" "$dbname"; then
+        echo "创建数据库失败"
+        return 1
+    fi
+    return 0
 }
 
 #删除数据库
 del_db(){
     local project_name="$1"
-
     dbname=$(echo "$project_name" | sed 's/[^A-Za-z0-9_]/_/g')
 
     db_script_path
-    ./mysql_db_manager.sh delete "mysql" "$dbname"
+    if ! ./mysql_db_manager.sh delete "mysql" "$dbname"; then
+        echo "删除数据库失败"
+        return 1 
+    fi
+    return 0
 }
 
 # WARP脚本管理
@@ -3306,7 +3288,7 @@ install_ldnmp(){
                 install_ssltls
                 redirect_config
                 nginx_status "mysql"
-		break_end
+                break_end
                 ;;
             63)
                 webname="反向代理-IP+端口"
@@ -3318,7 +3300,7 @@ install_ldnmp(){
                 install_ssltls
                 reverseproxy_config
                 nginx_status "mysql"
-		break_end
+                break_end
                 ;;
             64)
                 webname="反向代理-域名"
@@ -3330,7 +3312,7 @@ install_ldnmp(){
                 install_ssltls
                 reverseproxy_domain
                 nginx_status "mysql"
-		break_end
+                break_end
                 ;;
             65)
                 webname="静态站点"
@@ -3339,7 +3321,7 @@ install_ldnmp(){
                 install_ssltls
                 custom_static
                 nginx_status "mysql"
-		break_end
+                break_end
                 ;;
             66)
                 clear
@@ -3379,17 +3361,14 @@ install_ldnmp(){
             81)
                 root_use
                 site_manage "mysql"
-		break_end
                 ;;
             82)
                 clear
                 cd /home/ && tar czvf web_$(date +"%Y%m%d%H%M%S").tar.gz web
                 backup_site_data
-		break_end
                 ;;
             83)
                 scheduled_remote_backup
-		break_end
                 ;;
             84)
                 # 还原全站数据
@@ -3411,15 +3390,13 @@ install_ldnmp(){
                 echo "LDNMP环境安装完毕"
                 echo "------------------------"
                 ldnmp_info
-		break_end
+                break_end
                 ;;
             85)
                 site_defense_program
-		break_end
                 ;;
             86)
                 optimize_ldnmp
-		break_end
                 ;;
             87)
                 clear
@@ -3446,8 +3423,7 @@ install_ldnmp(){
                     break_end
                 else
                     echo "端口已被占用，请检查并释放该端口。"
-                fi 
-		break_end
+                fi             
                 ;;
             88)
                 clear
@@ -3457,10 +3433,10 @@ install_ldnmp(){
                         docker rm -f nginx php php74 mysql redis
                         docker rmi nginx nginx:alpine php:fpm php:fpm-alpine php:7.4.33-fpm php:7.4-fpm-alpine mysql redis redis:alpine
                         rm -rf /home/docker/web
-			break_end
+                        break_end
                         ;;
                     [Nn])
-		    	break_end
+                        break_end
                         ;;
                     *)
                         echo "无效的选择，请输入 Y 或 N。"
