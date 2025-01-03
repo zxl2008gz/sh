@@ -1110,7 +1110,7 @@ gcp_script() {
                 ;;
             0)
                 # 退出脚本
-                solin
+                break
                 ;;
             *)
                 echo "无效的选项，请重新输入！"
