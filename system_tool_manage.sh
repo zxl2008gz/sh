@@ -2293,16 +2293,14 @@ system_tool() {
 }
 
 # 主逻辑
-case $choice in
-    work)
-        work_area
-        ;;
-    tool)
-        system_tool
-        ;;
-    *)
-        echo "无效的选择!"
-        echo "用法: $0 {work|tool}"
-        exit 1
-        ;;
+case "$1" in
+        work)
+            work_area
+            ;;
+        tool)
+            system_tool
+            ;;
+        *)
+            echo "Usage: $0 {work|tool}"
+            exit 1
 esac
