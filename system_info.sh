@@ -8,6 +8,19 @@ hong='\033[31m'
 lianglan='\033[96m'
 hui='\e[37m'
 
+# 在文件开头添加错误处理函数
+log_error() {
+    echo "[ERROR] $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
+}
+
+log_info() {
+    echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1"
+}
+
+# 添加错误处理
+set -e  # Exit on error
+trap 'log_error "An error occurred on line $LINENO. Exit code: $?"' ERR
+
 # 函数：退出
 break_end() {
     echo -e "${lv}操作完成${bai}"
@@ -32,36 +45,52 @@ ask_confirmation() {
     done
 }
 
+# 检测包管理器类型
+get_package_manager() {
+    local pkg_managers=("dnf" "yum" "apt" "apk")
+    
+    for pm in "${pkg_managers[@]}"; do
+        if command -v "$pm" &>/dev/null; then
+            echo "$pm"
+            return 0
+        fi
+    done
+    
+    log_error "No supported package manager found"
+    return 1
+}
+
+# 修改 install 函数
 install() {
     if [ $# -eq 0 ]; then
-        echo "未提供软件包参数!"
+        log_error "No package specified"
         return 1
     fi
 
+    local pkg_manager=$(get_package_manager)
+    [ -z "$pkg_manager" ] && return 1
+
     for package in "$@"; do
         if ! command -v "$package" &>/dev/null; then
-            if command -v dnf &>/dev/null; then
-                echo "使用DNF安装 $package..."
-                dnf -y update && dnf install -y "$package"
-            elif command -v yum &>/dev/null; then
-                echo "使用YUM安装 $package..."
-                yum -y update && yum -y install "$package"
-            elif command -v apt &>/dev/null; then
-                echo "使用APT安装 $package..."
-                apt update -y && apt install -y "$package"
-            elif command -v apk &>/dev/null; then
-                echo "使用APK安装 $package..."
-                apk update && apk add "$package"
-            else
-                echo "未知的包管理器!"
-                return 1
-            fi
+            log_info "Installing $package using $pkg_manager..."
+            case "$pkg_manager" in
+                dnf)
+                    dnf -y update && dnf install -y "$package"
+                    ;;
+                yum)
+                    yum -y update && yum -y install "$package"
+                    ;;
+                apt)
+                    apt update -y && apt install -y "$package"
+                    ;;
+                apk)
+                    apk update && apk add "$package"
+                    ;;
+            esac
         else
-            echo "$package 已经安装."
+            log_info "$package is already installed"
         fi
     done
-
-    return 0
 }
 
 # 定义卸载软件包函数
@@ -100,18 +129,32 @@ remove() {
 # 函数: 获取IP地址
 get_ip_address() {
     local ipv4_address ipv6_address
+    local timeout=3
+    local retry_count=2
 
-    # 尝试获取 IPv4 地址
-    ipv4_address=$(curl -s ipv4.ip.sb 2>/dev/null || echo "Unknown")
-    if [ "$ipv4_address" = "Unknown" ]; then
-        ipv4_address=""
+    # 尝试多个IP查询服务
+    local ipv4_services=("ipv4.ip.sb" "api.ipify.org" "ifconfig.me")
+    local ipv6_services=("ipv6.ip.sb" "api64.ipify.org" "v6.ident.me")
+
+    # 获取IPv4地址
+    for service in "${ipv4_services[@]}"; do
+        ipv4_address=$(curl -s --max-time $timeout "$service" 2>/dev/null) && break
+    done
+
+    # 获取IPv6地址
+    for service in "${ipv6_services[@]}"; do
+        ipv6_address=$(curl -s --max-time $timeout "$service" 2>/dev/null) && break
+    done
+
+    # 验证IP地址格式
+    if [[ ! $ipv4_address =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        ipv4_address="Unknown"
     fi
-    # 尝试获取 IPv6 地址
-    ipv6_address=$(curl -s --max-time 1 ipv6.ip.sb 2>/dev/null || echo "Unknown")
-    if [ "$ipv6_address" = "Unknown" ]; then
-        ipv6_address=""
-    fi    
-    # 输出 IPv4 和 IPv6 地址
+    
+    if [[ ! $ipv6_address =~ ^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$ ]]; then
+        ipv6_address="Unknown"
+    fi
+
     echo "$ipv4_address $ipv6_address"
 }
 
@@ -161,12 +204,43 @@ get_swap_info() {
     echo "$swap_used $swap_total $swap_percentage $swap_info"
 }
 
+# 添加缓存相关函数
+CACHE_DIR="/tmp/system_info_cache"
+CACHE_TIMEOUT=300  # 5分钟缓存
+
+init_cache() {
+    mkdir -p "$CACHE_DIR"
+}
+
+get_cached_value() {
+    local key=$1
+    local cache_file="$CACHE_DIR/$key"
+    
+    if [ -f "$cache_file" ] && [ $(($(date +%s) - $(stat -c %Y "$cache_file"))) -lt $CACHE_TIMEOUT ]; then
+        cat "$cache_file"
+        return 0
+    fi
+    return 1
+}
+
+set_cached_value() {
+    local key=$1
+    local value=$2
+    echo "$value" > "$CACHE_DIR/$key"
+}
+
 # 函数: 显示系统信息
 system_info_query() {
+    init_cache
     clear
 
-    # 获取IP地址
-    read ipv4_address ipv6_address < <(get_ip_address)
+    # 获取IP地址（使用缓存）
+    local ip_info
+    if ! ip_info=$(get_cached_value "ip_info"); then
+        ip_info=$(get_ip_address)
+        set_cached_value "ip_info" "$ip_info"
+    fi
+    read ipv4_address ipv6_address <<< "$ip_info"
 
     # 获取CPU信息
     local cpu_model=$(awk -F': ' '/^model name/ {print $2;exit}' /proc/cpuinfo 2>/dev/null || echo "Unknown")
@@ -309,6 +383,13 @@ clean_alpine() {
     echo "Alpine 系统清理完成。"
 }
 
+# 清理系统缓存
+clean_memory_cache() {
+    sync
+    echo 3 > /proc/sys/vm/drop_caches
+    echo 1 > /proc/sys/vm/compact_memory
+}
+
 # 清理系统垃圾
 clean_service_info() {
     echo "开始清理系统垃圾..."
@@ -317,6 +398,7 @@ clean_service_info() {
         exit 1
     fi
 
+    # 根据系统类型执行相应的清理
     if [ -f "/etc/debian_version" ]; then
         clean_debian
     elif [ -f "/etc/redhat-release" ]; then
@@ -326,6 +408,12 @@ clean_service_info() {
     else
         echo "未能识别的系统类型或系统不支持。"
         exit 1
+    fi
+
+    # 询问是否清理内存缓存
+    if ask_confirmation "是否要清理内存缓存？"; then
+        clean_memory_cache
+        log_info "内存缓存已清理"
     fi
 }
 
@@ -694,7 +782,6 @@ test_script() {
                 ;;
             25)
                 clear
-
                 echo "可参考的IP列表"
                 echo "------------------------"
                 echo "北京电信: 219.141.136.12"
@@ -713,7 +800,6 @@ test_script() {
                 echo "湖南联通: 42.48.16.100"
                 echo "湖南移动: 39.134.254.6"
                 echo "------------------------"
-
                 read -p "输入一个指定IP: " testip
                 curl nxtrace.org/nt |bash
                 nexttrace $testip
@@ -1033,8 +1119,52 @@ gcp_script() {
     done
 }
 
-# 主逻辑
-case "$1" in
+# 主菜单函数
+show_main_menu() {
+    while true; do
+        clear
+        echo "▶ 系统管理脚本"
+        echo "------------------------"
+        echo "1. 系统信息查询"
+        echo "2. 系统更新"
+        echo "3. 系统清理"
+        echo "4. 常用工具"
+        echo "5. BBR管理"
+        echo "6. 测试脚本"
+        echo "7. 甲骨文云脚本"
+        echo "8. 谷歌云脚本"
+        echo "------------------------"
+        echo "0. 退出脚本"
+        echo "------------------------"
+        read -p "请输入你的选择: " choice
+
+        case $choice in
+            1) system_info_query ;;
+            2) update_service_info ;;
+            3) clean_service_info ;;
+            4) common_tool_install ;;
+            5) bbr_script ;;
+            6) test_script ;;
+            7) oracle_script ;;
+            8) gcp_script ;;
+            0) exit 0 ;;
+            *) echo "无效的选择!" ;;
+        esac
+        
+        # 如果不是退出选项，则等待用户按键继续
+        if [ "$choice" != "0" ]; then
+            break_end
+        fi
+    done
+}
+
+# 主程序入口
+if [ $# -eq 0 ]; then
+    # 如果没有参数，显示交互式菜单
+    show_main_menu
+else
+    # 如果有参数，按原来的方式处理
+    case "$1" in
         query)
             system_info_query
             ;;
@@ -1063,3 +1193,4 @@ case "$1" in
             echo "Usage: $0 {update|query|clean|commontool|bbr|test|oracle|gcp}"
             exit 1
     esac
+fi
