@@ -3573,7 +3573,7 @@ while true; do
     set_shortcut_keys   
     clear  # 清除屏幕
     # 显示菜单
-    echo -e "${lianglan} _   _ "
+    echo "_   _ "
     echo "|_  | |  |    | |\ | "
     echo " _| |_|  |___ | | \| "
     echo "                                "
