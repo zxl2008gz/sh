@@ -13,10 +13,16 @@ vers='1.1.0'
 set_shortcut_keys(){
     
     # 从 .bashrc 文件中查找已设置的别名
-    current_alias=$(grep "alias [^=]*='~/solin.sh'" ~/.bashrc | awk -F"=" '{print $1}' | awk '{print $2}')
+    # 使用更精确的搜索方式
+    current_alias=$(grep -E "^alias [^=]+='~/solin\.sh'$" ~/.bashrc | awk -F"[ =']" '{print $2}')
+    
     # 如果找到别名，设置 kjjian
     if [ -n "$current_alias" ]; then
         kjjian="$current_alias"
+        # 确保找到的别名不是 's'
+        if [ "$kjjian" = "s" ]; then
+            unset kjjian
+        fi
     fi
     # 如果没找到别名，不设置 kjjian，让它使用默认值
 }
